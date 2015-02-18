@@ -1,8 +1,9 @@
 from __future__ import division
-import fiona
+import os
 import numpy as np
 from osgeo import ogr, osr, gdal
 import psycopg2
+import shapely.wkt, shapely.ops
 
 def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
@@ -68,7 +69,7 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, \
     cols = array.shape[1]
     rows = array.shape[0]
     xmin, ymax = rasterOrigin
-    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Float32)
+    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Int16)
     outRaster.SetGeoTransform((xmin, pixel_size, 0, ymax, 0, -pixel_size))
     outRasterSRS = osr.SpatialReference()
     outRasterSRS.ImportFromProj4(out_proj4)
@@ -97,24 +98,25 @@ def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 
     family_list = [x[0] for x in postgis_cur.fetchall()]
     
     for family in family_list:
-        sp_list_exec = "SELECT DISTINCT binomial FROM " + table_name + " WHERE family_nam='" + family + "'"
-        postgis_cur.execute(sp_list_exec)
-        sp_list = [x[0] for x in postgis_cur.fetchall()]
-        family_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
-        # Create empty array 
-        for sp in sp_list:
-            sp_geom_exec = "SELECT ST_AsText(geom) FROM " + table_name + " WHERE binomial='" + sp + "'"
-            postgis_cur.execute(sp_geom_exec)
-            sp_geom = [ogr.CreateGeometryFromWkt(x[0]) for x in postgis_cur.fetchall()]
-            union = sp_geom[0]
-            if len(sp_geom) > 1: 
-                for geom in sp_geom: union = union.Union(geom) # This is the range of a species
-            # Reproject geom into Behrmann
-            wkt_reproj = reproj(union.ExportToWkt())
-            # Convert species range to raster array
-            sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)
-            family_landscape += sp_landscape
         out_file = out_dir + '/' + table_name + '_' + family + '_' + str(int(pixel_size)) + '.tif'
-        convert_array_to_raster(family_landscape, [xmin, ymax], out_file, pixel_size)
+        # Check to make sure file doesn't exist already - useful to resume from unexpected breaks
+        if not os.path.exists(out_file):
+            sp_list_exec = "SELECT DISTINCT binomial FROM " + table_name + " WHERE family_nam='" + family + "'"
+            postgis_cur.execute(sp_list_exec)
+            sp_list = [x[0] for x in postgis_cur.fetchall()]
+            family_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
+            # Create empty array 
+            for sp in sp_list:
+                sp_geom_exec = "SELECT ST_AsText(geom) FROM " + table_name + " WHERE binomial='" + sp + "'"
+                postgis_cur.execute(sp_geom_exec)
+                sp_geom_list = [x[0] for x in postgis_cur.fetchall()]
+                sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
+                sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+                # Reproject geom into Behrmann
+                wkt_reproj = reproj(sp_geom_wkt)
+                # Convert species range to raster array
+                sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)
+                family_landscape += sp_landscape
+            convert_array_to_raster(family_landscape, [xmin, ymax], out_file, pixel_size)
     return None
 

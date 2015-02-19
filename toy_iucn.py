@@ -109,10 +109,14 @@ def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 
             for sp in sp_list:
                 sp_geom_exec = "SELECT ST_AsText(geom) FROM " + table_name + " WHERE binomial='" + sp + "'"
                 postgis_cur.execute(sp_geom_exec)
-                sp_geom_list = [x[0] for x in postgis_cur.fetchall()]
+                sp_geom_list = [x[0] for x in postgis_cur.fetchall()] # Here sp_geom_list is a list of geoms in WKT, each a multipolygon
                 sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
-                sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-                # Reproject geom into Behrmann
+                try:
+                    sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+                except: # Fails for Gulo gulo, because of holes?
+                    sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes] # Adding zero buffer somehow helps
+                    sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+                # Reproject geom into Behrmann                
                 wkt_reproj = reproj(sp_geom_wkt)
                 # Convert species range to raster array
                 sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)

@@ -1,6 +1,7 @@
 from __future__ import division
 import os
 import numpy as np
+from scipy import stats
 from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
@@ -30,6 +31,25 @@ def proj_extent(proj_name):
         xmax = 1.73675293395E7
         ymax = 7342230.136500001
     return [xmin, xmax, ymin, ymax]
+
+def weighted_sample_range_size(range_size_list, size):
+    """Generate a random sample of a certain size (length) from a list of range sizes,
+    
+    weighted by the range sizes.
+    
+    """
+    sum_size = np.sum(range_size_list)
+    rand_unif = np.sort(stats.uniform.rvs(0, sum_size, size = size))
+    partial_sum = 0
+    selected_range = []
+    i, j = 0, 0
+    while len(selected_range) < size:
+        partial_sum += range_size_list[i]
+        while j < len(rand_unif) and partial_sum >= rand_unif[j]:
+            selected_range.append(range_size_list[i])
+            j += 1
+        i += 1
+    return selected_range
 
 def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 100000):
     """Createa an array that can be manipulated and/or later converted to raster.

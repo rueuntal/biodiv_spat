@@ -7,7 +7,7 @@ from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
 
-def get_sp_list_grid(in_dir):
+def import_sp_list_array(in_dir):
     """Read in the array file created by create_array_sp_list() with a list of species in each grid."""
     in_file = open(in_dir, 'rb')
     sp_array = cPickle.load(in_file)
@@ -109,8 +109,8 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, \
     outRaster = None
     return None
     
-def convert_sp_array(postgis_cur, table_name, sp, pixel_size):
-    """Subfunction to obtain a raster array of presence/absence for a given species."""
+def sp_reproj(postgis_cur, table_name, sp):
+    """Subfunction to obtain the range map of a species and reproject it to Behrmann Equal Area."""
     sp_geom_exec = "SELECT ST_AsText(geom) FROM " + table_name + " WHERE binomial='" + sp + "'"
     postgis_cur.execute(sp_geom_exec)
     sp_geom_list = [x[0] for x in postgis_cur.fetchall()] # Here sp_geom_list is a list of geoms in WKT, each a multipolygon
@@ -122,9 +122,7 @@ def convert_sp_array(postgis_cur, table_name, sp, pixel_size):
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
     # Reproject geom into Behrmann                
     wkt_reproj = reproj(sp_geom_wkt)
-    # Convert species range to raster array
-    sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)
-    return sp_landscape
+    return wkt_reproj
     
 def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 100000):
     """Convert an IUCN shapefile with range maps of a taxon into rasters of richness, one for each family, 
@@ -152,11 +150,34 @@ def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 
             family_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
             # Create empty array 
             for sp in sp_list:
-                sp_landscape =  convert_sp_array(postgis_cur, table_name, sp, pixel_size)
+                wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+                # Convert species range to raster array
+                sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
                 family_landscape += sp_landscape
             convert_array_to_raster(family_landscape, [xmin, ymax], out_file, pixel_size)
     return None
 
+def create_sp_range_dic(postgis_cur, table_name, out_dir):
+    """Obtain the range size of species (in m^2), put in a dictionary, and save to file. 
+    
+    Range sizes are calculated under Behrmann equal area projection.
+    
+    """
+    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
+    postgis_cur.execute(sp_list_exec)
+    sp_list = [x[0] for x in postgis_cur.fetchall()] 
+    sp_range_dic = {}
+    
+    for sp in sp_list:
+        wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+        sp_range_shape = shapely.wkt.loads(wkt_reproj)
+        sp_range_dic[sp] = sp_range_shape.area
+    
+    out_file = open(out_dir, 'rb')
+    cPickle.dump(sp_range_dic, out_file)
+    out_file.close()
+    return None
+        
 def create_array_sp_list(postgis_cur, table_name, out_dir, pixel_size = 100000):
     """Create an array with species list in each grid covering the globe."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
@@ -169,7 +190,9 @@ def create_array_sp_list(postgis_cur, table_name, out_dir, pixel_size = 100000):
     array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
     
     for sp in sp_list:
-        sp_array = convert_sp_array(postgis_cur, table_name, sp, pixel_size)
+        wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+        # Convert species range to raster array
+        sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
     
     # Save to file

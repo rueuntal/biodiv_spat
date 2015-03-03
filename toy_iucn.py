@@ -7,6 +7,13 @@ from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
 
+def get_sp_list_grid(in_dir):
+    """Read in the array file created by create_array_sp_list() with a list of species in each grid."""
+    in_file = open(in_dir, 'rb')
+    sp_array = cPickle.load(in_file)
+    in_file.close()
+    return sp_array
+
 def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Function to reproject geometries (defined by WKT). 

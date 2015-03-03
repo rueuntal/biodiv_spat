@@ -2,6 +2,7 @@ from __future__ import division
 import os
 import numpy as np
 from scipy import stats
+import cPickle
 from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
@@ -163,5 +164,10 @@ def create_array_sp_list(postgis_cur, table_name, out_dir, pixel_size = 100000):
     for sp in sp_list:
         sp_array = convert_sp_array(postgis_cur, table_name, sp, pixel_size)
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
-
+    
+    # Save to file
+    out_file = open(out_dir, 'wb')
+    cPickle.dump(array_list, out_file, protocol = 2)
+    out_file.close()
+    return None
     

@@ -246,7 +246,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
                 emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
                 emp_metric = metric_dist(emp_range_dist_grid, metric)
                 rand_metric_list = []
-                for i in range(Nsample):
+                for k in range(Nsample):
                     rand_dist_grid = weighted_sample_range_size(range_size_list, len(emp_range_dist_grid))
                     rand_metric_list.append(metric_dist(rand_dist_grid, metric))
                 # Compute quantile

@@ -254,7 +254,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
                 array_out[j][i] = quan
     
         # Save to file
-        out_file_name = out_dir + '/' + 'out_name' + '_' + metric + '.pck'
+        out_file_name = out_dir + '/' + out_name + '_' + metric + '.pck'
         out_file = open(out_file_name, 'wb')
         cPickle.dump(array_out, out_file, protocol = 2)
         out_file.close()

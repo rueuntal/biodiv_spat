@@ -7,12 +7,12 @@ from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
 
-def import_sp_list_array(in_dir):
-    """Read in the array file created by create_array_sp_list() with a list of species in each grid."""
+def import_pickle_file(in_dir):
+    """Read in pickled file."""
     in_file = open(in_dir, 'rb')
-    sp_array = cPickle.load(in_file)
+    in_obj = cPickle.load(in_file)
     in_file.close()
-    return sp_array
+    return in_obj
 
 def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
@@ -157,7 +157,7 @@ def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 
             convert_array_to_raster(family_landscape, [xmin, ymax], out_file, pixel_size)
     return None
 
-def create_sp_range_dic(postgis_cur, table_name, out_dir):
+def create_sp_range_dic(postgis_cur, table_name, out_file_name):
     """Obtain the range size of species (in m^2), put in a dictionary, and save to file. 
     
     Range sizes are calculated under Behrmann equal area projection.
@@ -173,12 +173,12 @@ def create_sp_range_dic(postgis_cur, table_name, out_dir):
         sp_range_shape = shapely.wkt.loads(wkt_reproj)
         sp_range_dic[sp] = sp_range_shape.area
     
-    out_file = open(out_dir, 'rb')
-    cPickle.dump(sp_range_dic, out_file)
+    out_file = open(out_file_name, 'wb')
+    cPickle.dump(sp_range_dic, out_file, protocol = 2)
     out_file.close()
     return None
         
-def create_array_sp_list(postgis_cur, table_name, out_dir, pixel_size = 100000):
+def create_array_sp_list(postgis_cur, table_name, out_file_name, pixel_size = 100000):
     """Create an array with species list in each grid covering the globe."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
     sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
@@ -196,8 +196,68 @@ def create_array_sp_list(postgis_cur, table_name, out_dir, pixel_size = 100000):
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
     
     # Save to file
-    out_file = open(out_dir, 'wb')
+    out_file = open(out_file_name, 'wb')
     cPickle.dump(array_list, out_file, protocol = 2)
     out_file.close()
     return None
+
+def metric_dist(dist, metric):
+    """Sub-function of compare_range_size_dists calcuting the designated metric for a distribution. 
     
+    Inputs:
+    dist: a list of range sizes, either emprirical or randomly generated.
+    metric: metric  to compute. See docstring for compare_range_size_dists() for details.    full_dist_expc: the expected values from the weighted full distribution of the same length as dist, only needed if metric = "ks".
+    
+    """
+    log_dist = np.log(dist)
+    if metric == 'mean': return np.mean(log_dist)
+    elif metric == 'sd': return np.std(log_dist, ddof = 1)
+    elif metric == 'skew': return stats.skew(log_dist)
+    
+def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metric, threshold = 5):
+    """Compare with empirical range size distribution in each grid with the expected distribution, 
+    
+    and save the output into an array.
+    
+    Inputs:
+    sp_list_array: array with species list in each grid, created by create_array_sp_list().
+    range_size_dic: dictionary of range size for each species, created by create_sp_range_dic().
+    out_dir: output directory
+    out_name: name of the output file, e.g., "terrestrial_mammals", "reptiles", etc. 
+    Nsample: number of random samples to draw from the full distribution.
+    metric: metric used to compare the empirical and randomly generated size distributions, which can take the following values:
+    "mean", "sd" (standard deviation), "skew" (skewness). All values are calcuated on log scale.
+    threshold: minimal species richness of a grid, below which it is not analyzed.
+    
+    Output:
+    File with an array of the same dimension as sp_list_array, where the value of each grid is the quantile of the empirical size distribution among the 
+    randomly generated size distributions, measured with the designated metric. 
+    The output file is written to the designated output directory, with the same out_name + "_" + metric + ".pck".
+    
+    """
+    array_out = np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float)
+    range_size_list = range_size_dic.values()
+    for j in range(len(sp_list_array)):
+        for i in range(len(sp_list_array[0])):
+            sp_grid = sp_list_array[j][i]
+            richness_grid = len(sp_grid)
+            if richness_grid < threshold: array_out[j][i] = -1 # Fill unanalyzed grids with -1
+            else:
+                emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
+                emp_metric = metric_dist(emp_range_dist_grid, metric)
+                rand_metric_list = []
+                for i in range(Nsample):
+                    rand_dist_grid = weighted_sample_range_size(range_size_list, len(emp_range_dist_grid))
+                    rand_metric_list.append(metric_dist(rand_dist_grid, metric))
+                # Compute quantile
+                quan = len([x for x in rand_metric_list if x <= emp_metric]) / Nsample
+                array_out[j][i] = quan
+    
+        # Save to file
+        out_file_name = out_dir + '/' + 'out_name' + '_' + metric + '.pck'
+        out_file = open(out_file_name, 'wb')
+        cPickle.dump(array_out, out_file, protocol = 2)
+        out_file.close()
+        return None
+    
+                

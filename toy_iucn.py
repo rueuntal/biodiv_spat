@@ -91,20 +91,20 @@ def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 1000
         gdal.RasterizeLayer(target_ds, [1], virtual_layer, None, None, [1],  ['ALL_TOUCHED=TRUE'])
     return band.ReadAsArray()
 
-def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, \
+def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value = 0, \
                             out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Convert an array to raster."""
     cols = array.shape[1]
     rows = array.shape[0]
     xmin, ymax = rasterOrigin
-    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Int16)
+    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Float64)
     outRaster.SetGeoTransform((xmin, pixel_size, 0, ymax, 0, -pixel_size))
     outRasterSRS = osr.SpatialReference()
     outRasterSRS.ImportFromProj4(out_proj4)
     outRaster.SetProjection(outRasterSRS.ExportToWkt())    
     outband = outRaster.GetRasterBand(1)
     outband.WriteArray(array)
-    outband.SetNoDataValue(0)
+    outband.SetNoDataValue(no_value)
     outRaster.FlushCache()
     outRaster = None
     return None
@@ -176,8 +176,30 @@ def create_sp_range_dic(postgis_cur, table_name, out_file_name):
     out_file = open(out_file_name, 'wb')
     cPickle.dump(sp_range_dic, out_file, protocol = 2)
     out_file.close()
-    return None
-        
+    return None        
+
+def create_sp_range_dic_bird(folder, out_file_name):
+    """create_sp_range_dic() for birds, where there is one shapefile per species instead of one shapefile for all species combined."""
+    sp_range_dic = {}
+    for file in os.listdir(folder):
+        if file.endswith('.shp'):
+            file_split = file.split('_')
+            sp_name = file_split[0] + ' ' + file_split[1]
+            if sp_name in sp_range_dic: print "Warning: " + sp_name + " has duplicates."
+            sp_driver = ogr.GetDriverByName('ESRI Shapefile')
+            sp_datasource = sp_driver.Open(folder + '/' + file, 0)
+            sp_layer = sp_datasource.GetLayer()
+            sp_feature = sp_layer[0]
+            sp_geom_wkt = sp_feature.GetGeometryRef().ExportToWkt()
+            wkt_reproj = reproj(sp_geom_wkt) # Reproject to Behrmann
+            sp_range_shape = shapely.wkt.loads(wkt_reproj)
+            sp_range_dic[sp_name] = sp_range_shape.area
+    
+    out_file = open(out_file_name, 'wb')
+    cPickle.dump(sp_range_dic, out_file, protocol = 2)
+    out_file.close()
+    return None        
+            
 def create_array_sp_list(postgis_cur, table_name, out_file_name, pixel_size = 100000):
     """Create an array with species list in each grid covering the globe."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
@@ -260,4 +282,3 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
         out_file.close()
         return None
     
-                

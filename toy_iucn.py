@@ -123,7 +123,20 @@ def sp_reproj(postgis_cur, table_name, sp):
     # Reproject geom into Behrmann                
     wkt_reproj = reproj(sp_geom_wkt)
     return wkt_reproj
-    
+
+def sp_reproj_birds(folder, file_name):
+    """sp_reproj() for birds. This file returns two strings - species binomial, and its reprojected range."""
+    in_dir = folder + '/' + file_name
+    file_split = file_name.split('_')
+    sp_name = file_split[0] + ' ' + file_split[1]
+    sp_driver = ogr.GetDriverByName('ESRI Shapefile')
+    sp_datasource = sp_driver.Open(folder + '/' + file_name, 0)
+    sp_layer = sp_datasource.GetLayer()
+    sp_feature = sp_layer[0]
+    sp_geom_wkt = sp_feature.GetGeometryRef().ExportToWkt()
+    wkt_reproj = reproj(sp_geom_wkt) # Reproject to Behrmann
+    return sp_name, wkt_reproj
+
 def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 100000):
     """Convert an IUCN shapefile with range maps of a taxon into rasters of richness, one for each family, 
     
@@ -183,15 +196,8 @@ def create_sp_range_dic_bird(folder, out_file_name):
     sp_range_dic = {}
     for file in os.listdir(folder):
         if file.endswith('.shp'):
-            file_split = file.split('_')
-            sp_name = file_split[0] + ' ' + file_split[1]
+            sp_name, wkt_reproj = sp_reproj_birds(folder, file)
             if sp_name in sp_range_dic: print "Warning: " + sp_name + " has duplicates."
-            sp_driver = ogr.GetDriverByName('ESRI Shapefile')
-            sp_datasource = sp_driver.Open(folder + '/' + file, 0)
-            sp_layer = sp_datasource.GetLayer()
-            sp_feature = sp_layer[0]
-            sp_geom_wkt = sp_feature.GetGeometryRef().ExportToWkt()
-            wkt_reproj = reproj(sp_geom_wkt) # Reproject to Behrmann
             sp_range_shape = shapely.wkt.loads(wkt_reproj)
             sp_range_dic[sp_name] = sp_range_shape.area
     
@@ -216,6 +222,28 @@ def create_array_sp_list(postgis_cur, table_name, out_file_name, pixel_size = 10
         # Convert species range to raster array
         sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
+    
+    # Save to file
+    out_file = open(out_file_name, 'wb')
+    cPickle.dump(array_list, out_file, protocol = 2)
+    out_file.close()
+    return None
+
+def create_array_sp_list_birds(folder, out_file_name, pixel_size = 100000):
+    """create_array_sp_list() for birds."""
+    xmin, xmax, ymin, ymax = proj_extent('behrmann')
+    
+    x_res = int((xmax - xmin) / pixel_size)
+    y_res = int((ymax - ymin) / pixel_size)
+    array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
+    
+    file_list = os.listdir(folder)
+    for file in file_list:
+        if file.endswith('.shp'):
+            sp, wkt_reproj = sp_reproj_birds(folder, file)
+            # Convert species range to raster array
+            sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
+            array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
     
     # Save to file
     out_file = open(out_file_name, 'wb')

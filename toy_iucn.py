@@ -318,7 +318,7 @@ def metric_dist(dist, metric):
     elif metric == 'sd': return np.std(log_dist, ddof = 1)
     elif metric == 'skew': return stats.skew(log_dist)
     
-def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metric, threshold = 5):
+def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metric, marine_list = [], threshold = 5):
     """Compare with empirical range size distribution in each grid with the expected distribution, 
     
     and save the output into an array.
@@ -331,6 +331,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     Nsample: number of random samples to draw from the full distribution.
     metric: metric used to compare the empirical and randomly generated size distributions, which can take the following values:
     "mean", "sd" (standard deviation), "skew" (skewness). All values are calcuated on log scale.
+    marine_list: if there are any marine species to be removed from the analysis
     threshold: minimal species richness of a grid, below which it is not analyzed.
     
     Output:
@@ -341,9 +342,13 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     """
     array_out = np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float)
     range_size_list = range_size_dic.values()
+    # Remove marine species from the dictionary of range sizes
+    for marine_sp in marine_list: del range_size_list[marine_sp]
     for j in range(len(sp_list_array)):
         for i in range(len(sp_list_array[0])):
             sp_grid = sp_list_array[j][i]
+            # Remove marine species from local species list
+            sp_grid = [sp for sp in sp_grid if sp not in marine_list]
             richness_grid = len(sp_grid)
             if richness_grid < threshold: array_out[j][i] = -1 # Fill unanalyzed grids with -1
             else:

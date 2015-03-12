@@ -215,10 +215,9 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
     postgis_cur.execute(sp_list_exec)
     sp_list = [x[0] for x in postgis_cur.fetchall()] 
-    sp_range_dic = {}
     
     ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
-    ocean_datasource = sp_driver.Open(ocean_file_dir, 0)
+    ocean_datasource = ocean_driver.Open(ocean_file_dir, 0)
     ocean_layer = ocean_datasource.GetLayer()
     ocean_feature = ocean_layer[0]
     ocean_geom_wkt_reproj = reproj(ocean_feature.GetGeometryRef().ExportToWkt())

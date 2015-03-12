@@ -125,7 +125,7 @@ def sp_reproj(postgis_cur, table_name, sp):
     return wkt_reproj
 
 def sp_reproj_birds(folder, file_name):
-    """sp_reproj() for birds. This file returns two strings - species binomial, and its reprojected range."""
+    """sp_reproj() for birds. This function returns two strings - species binomial, and its reprojected range."""
     in_dir = folder + '/' + file_name
     file_split = file_name.split('_')
     sp_name = file_split[0] + ' ' + file_split[1]
@@ -203,6 +203,37 @@ def create_sp_range_dic_bird(folder, out_file_name):
     
     out_file = open(out_file_name, 'wb')
     cPickle.dump(sp_range_dic, out_file, protocol = 2)
+    out_file.close()
+    return None        
+
+def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name, threshold = 0.1):
+    """Identify species with a significant proportion of their ranges (above a designated threshold)
+    
+    in the ocean and save the list.
+    
+    """
+    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
+    postgis_cur.execute(sp_list_exec)
+    sp_list = [x[0] for x in postgis_cur.fetchall()] 
+    sp_range_dic = {}
+    
+    ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
+    ocean_datasource = sp_driver.Open(ocean_file_dir, 0)
+    ocean_layer = ocean_datasource.GetLayer()
+    ocean_feature = ocean_layer[0]
+    ocean_geom_wkt_reproj = reproj(ocean_feature.GetGeometryRef().ExportToWkt())
+    ocean_shape = shapely.wkt.loads(ocean_geom_wkt_reproj)
+    
+    marine_sp_list = []
+    for sp in sp_list:
+        wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+        sp_range_shape = shapely.wkt.loads(wkt_reproj)
+        intersect = sp_range_shape.intersection(ocean_shape)
+        if intersect.area > sp_range_shape.area * threshold: 
+            marine_sp_list.append(sp)
+    
+    out_file = open(out_file_name, 'wb')
+    cPickle.dump(marine_sp_list, out_file, protocol = 2)
     out_file.close()
     return None        
             

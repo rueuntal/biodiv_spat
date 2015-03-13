@@ -216,21 +216,28 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     postgis_cur.execute(sp_list_exec)
     sp_list = [x[0] for x in postgis_cur.fetchall()] 
     
+    # Reproject the ocean polygons
     ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
     ocean_datasource = ocean_driver.Open(ocean_file_dir, 0)
     ocean_layer = ocean_datasource.GetLayer()
-    ocean_feature = ocean_layer[0]
-    ocean_geom_wkt_reproj = reproj(ocean_feature.GetGeometryRef().ExportToWkt())
-    ocean_shape = (shapely.wkt.loads(ocean_geom_wkt_reproj)).buffer(0)
+    ocean_geom = []
+    for ocean_feature in ocean_layer:
+        ocean_geom.append(shapely.wkt.loads(ocean_feature.GetGeometryRef().ExportToWkt()))   
+    try:
+        ocean_shape = shapely.ops.cascaded_union(ocean_geom)
+    except: 
+        ocean_geom = [x.buffer(0) for x in ocean_geom] 
+        ocean_shape = shapely.ops.cascaded_union(ocean_geom)
+    ocean_reproj = shapely.wkt.loads(reproj(shapely.wkt.dumps(ocean_shape)))    
     
     marine_sp_list = []
     for sp in sp_list:
         wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
         sp_range_shape = shapely.wkt.loads(wkt_reproj)
-        try: intersect = sp_range_shape.intersection(ocean_shape)
+        try: intersect = sp_range_shape.intersection(ocean_reproj)
         except: 
             sp_range_shape = sp_range_shape.buffer(0)
-            intersect = sp_range_shape.intersection(ocean_shape)
+            intersect = sp_range_shape.intersection(ocean_reproj)
         if intersect.area > sp_range_shape.area * threshold: 
             marine_sp_list.append(sp)
     
@@ -241,22 +248,29 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
 
 def create_marine_sp_list_birds(folder, ocean_file_dir, out_file_name, threshold = 0.1):
     """create_marine_sp_list() for birds. """
+    # Reproject the ocean polygons
     ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
-    ocean_datasource = sp_driver.Open(ocean_file_dir, 0)
+    ocean_datasource = ocean_driver.Open(ocean_file_dir, 0)
     ocean_layer = ocean_datasource.GetLayer()
-    ocean_feature = ocean_layer[0]
-    ocean_geom_wkt_reproj = reproj(ocean_feature.GetGeometryRef().ExportToWkt())
-    ocean_shape = shapely.wkt.loads(ocean_geom_wkt_reproj)
+    ocean_geom = []
+    for ocean_feature in ocean_layer:
+        ocean_geom.append(shapely.wkt.loads(ocean_feature.GetGeometryRef().ExportToWkt()))   
+    try:
+        ocean_shape = shapely.ops.cascaded_union(ocean_geom)
+    except: 
+        ocean_geom = [x.buffer(0) for x in ocean_geom] 
+        ocean_shape = shapely.ops.cascaded_union(ocean_geom)
+    ocean_reproj = shapely.wkt.loads(reproj(shapely.wkt.dumps(ocean_shape)))    
     
     marine_sp_list = []
     for file in os.listdir(folder):
         if file.endswith('.shp'):
             sp_name, wkt_reproj = sp_reproj_birds(folder, file)
             sp_range_shape = shapely.wkt.loads(wkt_reproj)
-            try: intersect = sp_range_shape.intersection(ocean_shape)
+            try: intersect = sp_range_shape.intersection(ocean_reproj)
             except: 
                 sp_range_shape = sp_range_shape.buffer(0)
-                intersect = sp_range_shape.intersection(ocean_shape)
+                intersect = sp_range_shape.intersection(ocean_reproj)
             if intersect.area > sp_range_shape.area * threshold:
                 marine_sp_list.append(sp_name)
         

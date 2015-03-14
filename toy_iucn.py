@@ -14,6 +14,16 @@ def import_pickle_file(in_dir):
     in_file.close()
     return in_obj
 
+def read_in_shapefile(in_dir): 
+    """Read in a .shp file and save the geometry each feature in a list of WKT."""
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    datasource = driver.Open(in_dir, 0)
+    layer = datasource.GetLayer()
+    geom_list = []
+    for feature in layer:
+        geom_list.append(feature.GetGeometryRef().ExportToWkt())
+    return geom_list
+    
 def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Function to reproject geometries (defined by WKT). 
@@ -236,8 +246,7 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     marine_sp_list = []
     for sp in sp_list:
         wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
-        sp_array = create_array_for_raster(proj_extent('behrmann'), wkt_reproj)
-        
+        sp_array = create_array_for_raster(proj_extent('behrmann'), wkt_reproj)        
         # 1. A crude and fast assessment by overlaying the array of ceans and the array of species
         sp_ocean_array = sp_array + ocean_array
         # This is the number of overlapping grids between the species range and the ocean

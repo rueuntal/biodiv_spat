@@ -206,7 +206,7 @@ def create_sp_range_dic_bird(folder, out_file_name):
     out_file.close()
     return None        
 
-def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name, threshold = 0.1):
+def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name, threshold = 0.5):
     """Identify species with a significant proportion of their ranges (above a designated threshold)
     
     in the ocean and save the list.
@@ -228,18 +228,29 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     except: 
         ocean_geom = [x.buffer(0) for x in ocean_geom] 
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
-    ocean_reproj = shapely.wkt.loads(reproj(shapely.wkt.dumps(ocean_shape)))    
-    
+    ocean_reproj_wkt = reproj(shapely.wkt.dumps(ocean_shape))
+    ocean_reproj = shapely.wkt.loads(ocean_reproj_wkt)    
+    # Convert ocean_reproj into array for a crude comparison first
+    ocean_array = create_array_for_raster(proj_extent('behrmann'), ocean_reproj_wkt)
+
     marine_sp_list = []
     for sp in sp_list:
         wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
-        sp_range_shape = shapely.wkt.loads(wkt_reproj)
-        try: intersect = sp_range_shape.intersection(ocean_reproj)
-        except: 
-            sp_range_shape = sp_range_shape.buffer(0)
-            intersect = sp_range_shape.intersection(ocean_reproj)
-        if intersect.area > sp_range_shape.area * threshold: 
-            marine_sp_list.append(sp)
+        sp_array = create_array_for_raster(proj_extent('behrmann'), wkt_reproj)
+        
+        # 1. A crude and fast assessment by overlaying the array of ceans and the array of species
+        sp_ocean_array = sp_array + ocean_array
+        # This is the number of overlapping grids between the species range and the ocean
+        num_2 = len(np.where(sp_ocean_array == 2)[0])
+        if num_2 >= np.sum(sp_ocean_array) * threshold: 
+            # 2. A more accurate calculation using polygons instead of rasters
+            sp_range_shape = shapely.wkt.loads(wkt_reproj)
+            try: intersect = sp_range_shape.intersection(ocean_reproj)
+            except: 
+                sp_range_shape = sp_range_shape.buffer(0)
+                intersect = sp_range_shape.intersection(ocean_reproj)
+            if intersect.area > sp_range_shape.area * threshold: 
+                marine_sp_list.append(sp)
     
     out_file = open(out_file_name, 'wb')
     cPickle.dump(marine_sp_list, out_file, protocol = 2)

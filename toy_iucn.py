@@ -14,7 +14,7 @@ def import_pickle_file(in_dir):
     in_file.close()
     return in_obj
 
-def read_in_shapefile(in_dir): 
+def import_shapefile(in_dir): 
     """Read in a .shp file and save the geometry each feature in a list of WKT."""
     driver = ogr.GetDriverByName('ESRI Shapefile')
     datasource = driver.Open(in_dir, 0)
@@ -227,12 +227,8 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     sp_list = [x[0] for x in postgis_cur.fetchall()] 
     
     # Reproject the ocean polygons
-    ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
-    ocean_datasource = ocean_driver.Open(ocean_file_dir, 0)
-    ocean_layer = ocean_datasource.GetLayer()
-    ocean_geom = []
-    for ocean_feature in ocean_layer:
-        ocean_geom.append(shapely.wkt.loads(ocean_feature.GetGeometryRef().ExportToWkt()))   
+    ocean_geom_list = import_shapefile(ocean_file_dir)
+    ocean_geom = [shapely.wkt.loads(x) for x in ocean_geom_list]
     try:
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
     except: 
@@ -251,7 +247,7 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
         sp_ocean_array = sp_array + ocean_array
         # This is the number of overlapping grids between the species range and the ocean
         num_2 = len(np.where(sp_ocean_array == 2)[0])
-        if num_2 >= np.sum(sp_ocean_array) * threshold: 
+        if num_2 >= np.sum(sp_array) * threshold: # If the number of overlapping grids is larger than a proportion of species range
             # 2. A more accurate calculation using polygons instead of rasters
             sp_range_shape = shapely.wkt.loads(wkt_reproj)
             try: intersect = sp_range_shape.intersection(ocean_reproj)
@@ -269,30 +265,33 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
 def create_marine_sp_list_birds(folder, ocean_file_dir, out_file_name, threshold = 0.1):
     """create_marine_sp_list() for birds. """
     # Reproject the ocean polygons
-    ocean_driver = ogr.GetDriverByName('ESRI Shapefile')
-    ocean_datasource = ocean_driver.Open(ocean_file_dir, 0)
-    ocean_layer = ocean_datasource.GetLayer()
-    ocean_geom = []
-    for ocean_feature in ocean_layer:
-        ocean_geom.append(shapely.wkt.loads(ocean_feature.GetGeometryRef().ExportToWkt()))   
+    ocean_geom_list = import_shapefile(ocean_file_dir)
+    ocean_geom = [shapely.wkt.loads(x) for x in ocean_geom_list]
     try:
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
     except: 
         ocean_geom = [x.buffer(0) for x in ocean_geom] 
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
-    ocean_reproj = shapely.wkt.loads(reproj(shapely.wkt.dumps(ocean_shape)))    
+    ocean_reproj_wkt = reproj(shapely.wkt.dumps(ocean_shape))
+    ocean_reproj = shapely.wkt.loads(ocean_reproj_wkt)    
+    # Convert ocean_reproj into array for a crude comparison first
+    ocean_array = create_array_for_raster(proj_extent('behrmann'), ocean_reproj_wkt)
     
     marine_sp_list = []
     for file in os.listdir(folder):
         if file.endswith('.shp'):
-            sp_name, wkt_reproj = sp_reproj_birds(folder, file)
-            sp_range_shape = shapely.wkt.loads(wkt_reproj)
-            try: intersect = sp_range_shape.intersection(ocean_reproj)
-            except: 
-                sp_range_shape = sp_range_shape.buffer(0)
-                intersect = sp_range_shape.intersection(ocean_reproj)
-            if intersect.area > sp_range_shape.area * threshold:
-                marine_sp_list.append(sp_name)
+            sp_name, wkt_reproj = sp_reproj_birds(folder, file)            
+            sp_array = create_array_for_raster(proj_extent('behrmann'), wkt_reproj)
+            sp_ocean_array = sp_array + ocean_array
+            num_2 = len(np.where(sp_ocean_array == 2)[0])
+            if num_2 >= np.sum(sp_array) * threshold: 
+                sp_range_shape = shapely.wkt.loads(wkt_reproj)
+                try: intersect = sp_range_shape.intersection(ocean_reproj)
+                except: 
+                    sp_range_shape = sp_range_shape.buffer(0)
+                    intersect = sp_range_shape.intersection(ocean_reproj)
+                if intersect.area > sp_range_shape.area * threshold:
+                    marine_sp_list.append(sp_name)
         
     out_file = open(out_file_name, 'wb')
     cPickle.dump(marine_sp_list, out_file, protocol = 2)

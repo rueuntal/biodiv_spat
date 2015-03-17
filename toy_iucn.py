@@ -6,6 +6,7 @@ import cPickle
 from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
+import multiprocessing
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -355,6 +356,13 @@ def metric_dist(dist, metric):
     if metric == 'mean': return np.mean(log_dist)
     elif metric == 'sd': return np.std(log_dist, ddof = 1)
     elif metric == 'skew': return stats.skew(log_dist)
+
+def obtain_metric_single(input_list):
+    """Subfunction for multiprocessing, called in compare_range_size_dists."""
+    range_size_list, sample_size, metric = input_list
+    rand_dist_grid = weighted_sample_range_size(range_size_list, sample_size)
+    metric_single =  metric_dist(rand_dist_grid, metric)
+    return metric_single
     
 def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metric, marine_list = [], threshold = 5):
     """Compare with empirical range size distribution in each grid with the expected distribution, 
@@ -382,6 +390,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     range_size_list = range_size_dic.values()
     # Remove marine species from the dictionary of range sizes
     for marine_sp in marine_list: del range_size_list[marine_sp]
+        
     for j in range(len(sp_list_array)):
         for i in range(len(sp_list_array[0])):
             sp_grid = sp_list_array[j][i]
@@ -392,11 +401,11 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
             else:
                 emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
                 emp_metric = metric_dist(emp_range_dist_grid, metric)
-                rand_metric_list = []
-                for k in range(Nsample):
-                    rand_dist_grid = weighted_sample_range_size(range_size_list, len(emp_range_dist_grid))
-                    rand_metric_list.append(metric_dist(rand_dist_grid, metric))
+                pool = multiprocessing.Pool()
+                rand_metric_list = pool.map(obtain_metric_single, [[range_size_list, richness_grid, metric] for k in range(Nsample)])
                 # Compute quantile
+                pool.close()
+                pool.join()
                 quan = len([x for x in rand_metric_list if x <= emp_metric]) / Nsample
                 array_out[j][i] = quan
     

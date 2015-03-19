@@ -359,12 +359,12 @@ def metric_dist(dist, metric):
 
 def obtain_metric_single(input_list):
     """Subfunction for multiprocessing, called in compare_range_size_dists."""
-    range_size_list, sample_size, metric = input_list
+    range_size_list, sample_size, metrics = input_list
     rand_dist_grid = weighted_sample_range_size(range_size_list, sample_size)
-    metric_single =  metric_dist(rand_dist_grid, metric)
-    return metric_single
+    metrics_single =  [metric_dist(rand_dist_grid, metric) for metric in metrics]
+    return metrics_single
     
-def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metric, marine_list = [], threshold = 5):
+def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metrics = ['mean', 'sd', 'skew'], marine_list = [], threshold = 5):
     """Compare with empirical range size distribution in each grid with the expected distribution, 
     
     and save the output into an array.
@@ -375,7 +375,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     out_dir: output directory
     out_name: name of the output file, e.g., "terrestrial_mammals", "reptiles", etc. 
     Nsample: number of random samples to draw from the full distribution.
-    metric: metric used to compare the empirical and randomly generated size distributions, which can take the following values:
+    metric: list of metrics used to compare the empirical and randomly generated size distributions, which can contain the following values:
     "mean", "sd" (standard deviation), "skew" (skewness). All values are calcuated on log scale.
     marine_list: if there are any marine species to be removed from the analysis
     threshold: minimal species richness of a grid, below which it is not analyzed.
@@ -386,7 +386,8 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     The output file is written to the designated output directory, with the same out_name + "_" + metric + ".pck".
     
     """
-    array_out = np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float)
+    array_out_list = [np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float) for i in range(len(metrics))]
+    #array_out = np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float)
     range_size_list = range_size_dic.values()
     # Remove marine species from the dictionary of range sizes
     for marine_sp in marine_list: del range_size_list[marine_sp]
@@ -397,21 +398,28 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
             # Remove marine species from local species list
             sp_grid = [sp for sp in sp_grid if sp not in marine_list]
             richness_grid = len(sp_grid)
-            if richness_grid < threshold: array_out[j][i] = -1 # Fill unanalyzed grids with -1
+            if richness_grid < threshold: 
+                for k in range(len(metrics)):
+                    array_out_list[k][j][i] = -1 # Fill unanalyzed grids with -1
             else:
                 emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
-                emp_metric = metric_dist(emp_range_dist_grid, metric)
+                emp_metrics = [metric_dist(emp_range_dist_grid, metric) for metric in metrics]
+                
                 pool = multiprocessing.Pool()
-                rand_metric_list = pool.map(obtain_metric_single, [[range_size_list, richness_grid, metric] for k in range(Nsample)])
-                # Compute quantile
+                rand_metrics_list = pool.map(obtain_metrics_single, [[range_size_list, richness_grid, metrics] for m in range(Nsample)])
                 pool.close()
                 pool.join()
-                quan = len([x for x in rand_metric_list if x <= emp_metric]) / Nsample
-                array_out[j][i] = quan
+                
+                # Compute quantile
+                for k in range(len(metrics)):
+                    rand_metric_list = [rand_single_iter[k] for rand_single_iter in rand_metrics_list]
+                    quan = len([x for x in rand_metric_list if x <= emp_metrics[k]]) / Nsample
+                    array_out_list[k][j][i] = quan
     
     # Save to file
-    out_file_name = out_dir + '/' + out_name + '_' + metric + '.pck'
-    out_file = open(out_file_name, 'wb')
-    cPickle.dump(array_out, out_file, protocol = 2)
-    out_file.close()
+    for k, metric in enumerate(metrics):
+        out_file_name = out_dir + '/' + out_name + '_' + metric + '.pck'
+        out_file = open(out_file_name, 'wb')
+        cPickle.dump(array_out_list[k], out_file, protocol = 2)
+        out_file.close()
     return None

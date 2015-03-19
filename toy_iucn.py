@@ -357,7 +357,7 @@ def metric_dist(dist, metric):
     elif metric == 'sd': return np.std(log_dist, ddof = 1)
     elif metric == 'skew': return stats.skew(log_dist)
 
-def obtain_metric_single(input_list):
+def obtain_metrics_single(input_list):
     """Subfunction for multiprocessing, called in compare_range_size_dists."""
     range_size_list, sample_size, metrics = input_list
     rand_dist_grid = weighted_sample_range_size(range_size_list, sample_size)

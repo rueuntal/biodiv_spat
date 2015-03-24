@@ -148,6 +148,24 @@ def sp_reproj_birds(folder, file_name):
     wkt_reproj = reproj(sp_geom_wkt) # Reproject to Behrmann
     return sp_name, wkt_reproj
 
+def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
+    """Convert an IUCN shapefile with range maps of a taxon into a raster file of richness, with a given list of species removed."""
+    xmin, xmax, ymin, ymax = proj_extent('behrmann')
+    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
+    postgis_cur.execute(family_list_exec)
+    sp_list = [x[0] for x in postgis_cur.fetchall() if x[0] not in remove_sp_list]
+    
+    table_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
+    for sp in sp_list:
+            wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+            # Convert species range to raster array
+            sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
+            table_landscape += sp_landscape
+            
+    out_file = out_dir + '/' + table_name + '_richness_' + str(int(pixel_size)) + '.tif'
+    convert_array_to_raster(table_landscape, [xmin, ymax], out_file, pixel_size)
+    return None
+    
 def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 100000):
     """Convert an IUCN shapefile with range maps of a taxon into rasters of richness, one for each family, 
     

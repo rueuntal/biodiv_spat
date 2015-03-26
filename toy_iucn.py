@@ -167,7 +167,7 @@ def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, re
     return None
  
 def richness_to_raster_birds(folder, out_dir, pixel_size = 100000, remove_sp_list = []):
-    """Convert an IUCN shapefile with range maps of a taxon into a raster file of richness, with a given list of species removed."""
+    """richness_to_raster() for birds."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
     table_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
     for file in os.listdir(folder):
@@ -176,7 +176,7 @@ def richness_to_raster_birds(folder, out_dir, pixel_size = 100000, remove_sp_lis
             sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size) 
             table_landscape += sp_landscape
             
-    out_file = out_dir + '/' + table_name + '_richness_' + str(int(pixel_size)) + '.tif'
+    out_file = out_dir + '/birds_richness_' + str(int(pixel_size)) + '.tif'
     convert_array_to_raster(table_landscape, [xmin, ymax], out_file, pixel_size)
     return None
     
@@ -419,10 +419,9 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     
     """
     array_out_list = [np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float) for i in range(len(metrics))]
-    #array_out = np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float)
-    range_size_list = range_size_dic.values()
-    # Remove marine species from the dictionary of range sizes
-    for marine_sp in marine_list: del range_size_list[marine_sp]
+    # Remove marine species from the dictionary of range sizes  
+    for marine_sp in marine_list: del range_size_dic[marine_sp]
+    range_size_list = range_size_dic.values()  
         
     for j in range(len(sp_list_array)):
         for i in range(len(sp_list_array[0])):

@@ -25,7 +25,17 @@ def import_shapefile(in_dir):
         geom_list.append(feature.GetGeometryRef().ExportToWkt())
     return geom_list
     
-def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+def reproj(in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+           out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+    """General function for reprojection which can be used for both vectors and rasters."""
+    in_proj = osr.SpatialReference()
+    in_proj.ImportFromProj4(in_proj4)
+    out_proj = osr.SpatialReference()
+    out_proj.ImportFromProj4(out_proj4)
+    transform = osr.CoordinateTransformation(in_proj, out_proj)
+    return transform
+
+def reproj_geom(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Function to reproject geometries (defined by WKT). 
     
@@ -33,11 +43,7 @@ def reproj(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs
     
     """
     in_geom_ogr = ogr.CreateGeometryFromWkt(in_geom)
-    in_proj = osr.SpatialReference()
-    in_proj.ImportFromProj4(in_proj4)
-    out_proj = osr.SpatialReference()
-    out_proj.ImportFromProj4(out_proj4)
-    transform = osr.CoordinateTransformation(in_proj, out_proj)
+    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
     in_geom_ogr.Transform(transform)
     return in_geom_ogr.ExportToWkt()
 
@@ -132,7 +138,7 @@ def sp_reproj(postgis_cur, table_name, sp):
         sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes] # Adding zero buffer somehow helps
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
     # Reproject geom into Behrmann                
-    wkt_reproj = reproj(sp_geom_wkt)
+    wkt_reproj = reproj_geom(sp_geom_wkt)
     return wkt_reproj
 
 def sp_reproj_birds(folder, file_name):
@@ -145,7 +151,7 @@ def sp_reproj_birds(folder, file_name):
     sp_layer = sp_datasource.GetLayer()
     sp_feature = sp_layer[0]
     sp_geom_wkt = sp_feature.GetGeometryRef().ExportToWkt()
-    wkt_reproj = reproj(sp_geom_wkt) # Reproject to Behrmann
+    wkt_reproj = reproj_geom(sp_geom_wkt) # Reproject to Behrmann
     return sp_name, wkt_reproj
 
 def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
@@ -179,7 +185,20 @@ def richness_to_raster_birds(folder, out_dir, pixel_size = 100000, remove_sp_lis
     out_file = out_dir + '/birds_richness_' + str(int(pixel_size)) + '.tif'
     convert_array_to_raster(table_landscape, [xmin, ymax], out_file, pixel_size)
     return None
-    
+ 
+def richness_to_raster_ver2(sp_array, out_dir, out_name, pixel_size = 100000, remove_sp_list = []):  
+    """Another way to convert ricness to raster which may be faster."""
+    xmin, xmax, ymin, ymax = proj_extent('behrmann')
+    table_richness = np.zeros(shape = sp_array.shape)
+    for j in range(len(sp_array)):
+        for i in range(len(sp_array[0])):
+            sp_grid = sp_array[j][i]
+            richness = len([sp for sp in sp_grid if sp not in remove_sp_list])
+            table_richness[j][i] = richness
+    out_file = out_dir + '/' + out_name + '_richness_' + str(pixel_size) + '.tif'
+    convert_array_to_raster(table_richness, [xmin, ymax], out_file, pixel_size)
+    return None
+
 def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 100000):
     """Convert an IUCN shapefile with range maps of a taxon into rasters of richness, one for each family, 
     
@@ -267,7 +286,7 @@ def create_marine_sp_list(postgis_cur, table_name, ocean_file_dir, out_file_name
     except: 
         ocean_geom = [x.buffer(0) for x in ocean_geom] 
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
-    ocean_reproj_wkt = reproj(shapely.wkt.dumps(ocean_shape))
+    ocean_reproj_wkt = reproj_geom(shapely.wkt.dumps(ocean_shape))
     ocean_reproj = shapely.wkt.loads(ocean_reproj_wkt)    
     # Convert ocean_reproj into array for a crude comparison first
     ocean_array = create_array_for_raster(proj_extent('behrmann'), ocean_reproj_wkt)
@@ -305,7 +324,7 @@ def create_marine_sp_list_birds(folder, ocean_file_dir, out_file_name, threshold
     except: 
         ocean_geom = [x.buffer(0) for x in ocean_geom] 
         ocean_shape = shapely.ops.cascaded_union(ocean_geom)
-    ocean_reproj_wkt = reproj(shapely.wkt.dumps(ocean_shape))
+    ocean_reproj_wkt = reproj_geom(shapely.wkt.dumps(ocean_shape))
     ocean_reproj = shapely.wkt.loads(ocean_reproj_wkt)    
     # Convert ocean_reproj into array for a crude comparison first
     ocean_array = create_array_for_raster(proj_extent('behrmann'), ocean_reproj_wkt)
@@ -454,3 +473,11 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
         cPickle.dump(array_out_list[k], out_file, protocol = 2)
         out_file.close()
     return None
+
+def reproj_raster(in_dir, in_type = 'bil', pixel_size = 100000, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+           out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+    """Resample and reproject a raster layer. Defaut is from WGS 84 to Behrmann Equal Area. Defaut input file type is .bil (used by World Clim)"""
+    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
+    in_file = gdal.Open(in_dir)
+    
+    

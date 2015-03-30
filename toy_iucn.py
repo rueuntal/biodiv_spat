@@ -474,10 +474,36 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
         out_file.close()
     return None
 
-def reproj_raster(in_dir, in_type = 'bil', pixel_size = 100000, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+def reproj_raster(in_dir, out_dir, pixel_size = 100000, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
-    """Resample and reproject a raster layer. Defaut is from WGS 84 to Behrmann Equal Area. Defaut input file type is .bil (used by World Clim)"""
+    """Resample and reproject a raster layer. Defaut is from WGS 84 to Behrmann Equal Area. 
+    
+    This is based on the example from http://jgomezdans.github.io/gdal_notes/reprojection.html. 
+    
+    """
+    in_proj = osr.SpatialReference()
+    in_proj.ImportFromProj4(in_proj4)
+    out_proj = osr.SpatialReference()
+    out_proj.ImportFromProj4(out_proj4)
     transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
     in_file = gdal.Open(in_dir)
+    in_nodata = in_file.GetRasterBand(1).GetNoDataValue()
     
-    
+    geo_t = in_file.GetGeoTransform()
+    x_size = in_file.RasterXSize
+    y_size = in_file.RasterYSize
+    (ulx, uly, ulz) = transform.TransformPoint(geo_t[0], geo_t[3])
+    (lrx, lry, lrz) = transform.TransformPoint(geo_t[0] + geo_t[1] * x_size, \
+                                               geo_t[3] + geo_t[5] * y_size)
+    outRaster = gdal.GetDriverByName('GTiff').\
+        Create(out_dir, int((lrx - ulx) / pixel_size), int((uly - lry) / pixel_size), 1, gdal.GDT_Float64)
+    new_geo = (ulx, pixel_size, geo_t[2], uly, geo_t[4], -pixel_size)
+    outRaster.SetGeoTransform(new_geo)
+    outRaster.SetProjection(out_proj.ExportToWkt())
+    outRaster.GetRasterBand(1).SetNoDataValue(in_nodata)
+    outRaster.GetRasterBand(1).Fill(in_nodata)
+    res = gdal.ReprojectImage(in_file, outRaster, in_proj.ExportToWkt(), out_proj.ExportToWkt(), \
+                              gdal.GRA_Bilinear)
+    outRaster.FlushCache()
+    outRaster = None    
+    return None

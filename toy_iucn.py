@@ -48,14 +48,19 @@ def reproj_geom(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no
     return in_geom_ogr.ExportToWkt()
 
 def proj_extent(proj_name):
-    """Give the extend (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
+    """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
+    in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
     if proj_name == 'behrmann':
-        # Obtained from http://tiles.arcgis.com/tiles/BG6nSlhZSAWtExvp/arcgis/rest/services/coordsys_Behrmann/MapServer?f=pjson
-        xmin = -1.73675293395E7
-        ymin = -7342230.1365
-        xmax = 1.73675293395E7
-        ymax = 7342230.136500001
-    return [xmin, xmax, ymin, ymax]
+        out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
+    
+    in_proj = osr.SpatialReference()
+    in_proj.ImportFromProj4(in_proj4)
+    out_proj = osr.SpatialReference()
+    out_proj.ImportFromProj4(out_proj4)
+    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
+    
+    x, y, z = transform.TransformPoint(180, 90)
+    return [-x, x, -y, y]
 
 def weighted_sample_range_size(range_size_list, size):
     """Generate a random sample of a certain size (length) from a list of range sizes,
@@ -89,7 +94,7 @@ def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 1000
     xmin, xmax, ymin, ymax = extent
     x_res = int((xmax - xmin) / pixel_size)
     y_res = int((ymax - ymin) / pixel_size)
-    target_ds = gdal.GetDriverByName('MEM').Create('', x_res, y_res, gdal.GDT_Byte)
+    target_ds = gdal.GetDriverByName('MEM').Create('', x_res, y_res, gdal.GDT_Float32)
     target_ds.SetGeoTransform((xmin, pixel_size, 0, ymax, 0, -pixel_size))
     band = target_ds.GetRasterBand(1)
     band.SetNoDataValue(no_value)
@@ -114,7 +119,7 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value 
     cols = array.shape[1]
     rows = array.shape[0]
     xmin, ymax = rasterOrigin
-    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Float64)
+    outRaster = gdal.GetDriverByName('GTiff').Create(out_file, cols, rows, 1, gdal.GDT_Float32)
     outRaster.SetGeoTransform((xmin, pixel_size, 0, ymax, 0, -pixel_size))
     outRasterSRS = osr.SpatialReference()
     outRasterSRS.ImportFromProj4(out_proj4)
@@ -474,8 +479,9 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
         out_file.close()
     return None
 
-def reproj_raster(in_dir, out_dir, pixel_size = 100000, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
-           out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+def reproj_raster(in_dir, out_dir, pixel_size = 100000, alg = gdal.GRA_Bilinear, \
+                  in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+                  out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Resample and reproject a raster layer. Defaut is from WGS 84 to Behrmann Equal Area. 
     
     This is based on the example from http://jgomezdans.github.io/gdal_notes/reprojection.html. 
@@ -496,14 +502,45 @@ def reproj_raster(in_dir, out_dir, pixel_size = 100000, in_proj4 = '+proj=longla
     (lrx, lry, lrz) = transform.TransformPoint(geo_t[0] + geo_t[1] * x_size, \
                                                geo_t[3] + geo_t[5] * y_size)
     outRaster = gdal.GetDriverByName('GTiff').\
-        Create(out_dir, int((lrx - ulx) / pixel_size), int((uly - lry) / pixel_size), 1, gdal.GDT_Float64)
+        Create(out_dir, int((lrx - ulx) / pixel_size), int((uly - lry) / pixel_size), 1, gdal.GDT_Float32)
     new_geo = (ulx, pixel_size, geo_t[2], uly, geo_t[4], -pixel_size)
     outRaster.SetGeoTransform(new_geo)
     outRaster.SetProjection(out_proj.ExportToWkt())
     outRaster.GetRasterBand(1).SetNoDataValue(in_nodata)
     outRaster.GetRasterBand(1).Fill(in_nodata)
-    res = gdal.ReprojectImage(in_file, outRaster, in_proj.ExportToWkt(), out_proj.ExportToWkt(), \
-                              gdal.GRA_Bilinear)
+    res = gdal.ReprojectImage(in_file, outRaster, in_proj.ExportToWkt(), out_proj.ExportToWkt(), alg)
     outRaster.FlushCache()
     outRaster = None    
+    return None
+
+def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, \
+                  in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
+                  out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+    """Similar to reproj_raster(), but the reprojected/resampled raster matches the grids of another raster."""
+    out_proj = osr.SpatialReference()
+    out_proj.ImportFromProj4(out_proj4)    
+    in_file = gdal.Open(in_dir)
+    try: in_proj_wkt = in_file.GetProjection()
+    except: 
+        in_proj = osr.SpatialReference()
+        in_proj.ImportFromProj4(in_proj4)
+        in_proj_wkt = in_proj.ExportToWkt()
+    in_file_geotrans = in_file.GetGeoTransform()
+    in_nodata = in_file.GetRasterBand(1).GetNoDataValue()
+  
+    match_file = gdal.Open(match_dir)
+    match_proj_wkt = match_file.GetProjection()
+    match_geotrans = match_file.GetGeoTransform()
+    wide = match_file.RasterXSize
+    high = match_file.RasterYSize
+    
+    outRaster = gdal.GetDriverByName('GTiff').Create(out_dir, wide, high, 1, gdal.GDT_Float32)
+    outRaster.SetGeoTransform(match_geotrans)
+    outRaster.SetProjection(match_proj_wkt)
+    outRaster.GetRasterBand(1).SetNoDataValue(in_nodata)
+    outRaster.GetRasterBand(1).Fill(in_nodata)
+    res = gdal.ReprojectImage(in_file, outRaster, in_proj_wkt, match_proj_wkt, alg)
+    outRaster.FlushCache()
+    outRaster = None    
+    
     return None

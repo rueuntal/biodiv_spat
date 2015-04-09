@@ -121,6 +121,7 @@ def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 1000
         virtual_layer.CreateFeature(feature)
         # This currently throws a warning about missing spatial ref
         gdal.RasterizeLayer(target_ds, [1], virtual_layer, None, None, [1],  ['ALL_TOUCHED=TRUE'])
+    band = target_ds.GetRasterBand(1)
     return band.ReadAsArray()
 
 def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value = 0, \
@@ -367,7 +368,7 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
     Output:
     File with an array of the same dimension as sp_list_array, where the value of each grid is the quantile of the empirical size distribution among the 
     randomly generated size distributions, measured with the designated metric. 
-    The output file is written to the designated output directory, with the same out_name + "_" + metric + ".pck".
+    The output file is written to the designated output directory, with the same out_name + "_" + metric + ".pkl".
     
     """
     array_out_list = [np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float) for k in range(len(metrics))]

@@ -61,11 +61,17 @@ def reproj_geom(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no
     in_geom_ogr.Transform(transform)
     return in_geom_ogr.ExportToWkt()
 
+def proj_name_to_proj4(proj_name):
+    """Given name of a projection, return its specification in PROJ4."""
+    name_and_proj = {'latlong': '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs',
+                     'behrmann': '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
+                     }
+    return name_and_proj[proj_name]
+
 def proj_extent(proj_name):
     """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
     in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
-    if proj_name == 'behrmann':
-        out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
+    out_proj4 = proj_name_to_proj4(proj_name)
     
     in_proj = osr.SpatialReference()
     in_proj.ImportFromProj4(in_proj4)
@@ -408,6 +414,35 @@ def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, N
         out_file.close()
     return None
 
+def reproj_raster_generic(in_file, out_dir, wide, high, geotrans, in_proj, out_proj, nodata, alg = gdal.GRA_Bilinear):
+    """Generic function to reproject raster."""
+    outRaster = write_raster_to_file(out_dir, wide, high, geotrans, out_proj, nodata = nodata)
+    res = gdal.ReprojectImage(in_file, outRaster, in_proj, out_proj, alg)
+    outRaster.FlushCache()
+    outRaster = None
+    return None
+
+def reproj_raster_pixel_size(in_dir, out_dir, pixel_size = 100000, alg = gdal.GRA_Bilinear, \
+                             in_proj_name = 'latlong', out_proj_name = 'behrmann'):
+    """Reproject a raster with projection and pixel size spcified."""
+    out_proj = osr.SpatialReference()
+    out_proj.ImportFromProj4(proj_name_to_proj4(out_proj_name))
+    out_proj_wkt = out_proj.ExportToWkt()
+    in_file = gdal.Open(in_dir)
+    try: in_proj_wkt = in_file.GetProjection()
+    except: 
+        in_proj = osr.SpatialReference()
+        in_proj.ImportFromProj4(proj_name_to_proj4(in_proj_name))
+        in_proj_wkt = in_proj.ExportToWkt()
+    in_nodata = in_file.GetRasterBand(1).GetNoDataValue()
+    out_extent = proj_extent(out_proj_name)
+    xmin, xmax, ymin, ymax = out_extent
+    wide = int((xmax - xmin) / pixel_size)
+    high = int((ymax - ymin) / pixel_size)
+    out_geotrans = (xmin, pixel_size, 0, ymax, 0, -pixel_size)
+    reproj_raster_generic(in_file, out_dir, wide, high, out_geotrans, in_proj_wkt, out_proj_wkt, in_nodata)
+    return None
+    
 def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, \
                   in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
                   out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
@@ -428,9 +463,6 @@ def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, 
     wide = match_file.RasterXSize
     high = match_file.RasterYSize
     
-    outRaster = write_raster_to_file(out_dir, wide, high, match_geotrans, match_proj_wkt, nodata = in_nodata)
-    res = gdal.ReprojectImage(in_file, outRaster, in_proj_wkt, match_proj_wkt, alg)
-    outRaster.FlushCache()
-    outRaster = None    
+    reproj_raster_generic(in_file, out_dir, wide, high, match_geotrans, in_proj_wkt, match_proj_wkt, in_nodata)
     
     return None

@@ -131,7 +131,7 @@ def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 1000
     return band.ReadAsArray()
 
 def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value = 0, \
-                            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+                            out_proj = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Convert an array to raster."""
     cols = array.shape[1]
     rows = array.shape[0]
@@ -466,3 +466,34 @@ def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, 
     reproj_raster_generic(in_file, out_dir, wide, high, match_geotrans, in_proj_wkt, match_proj_wkt, in_nodata)
     
     return None
+
+def get_range_raster(in_dir_high, in_dir_low, out_dir):
+    """Obtain the difference between two rasters and write to a new raster. 
+    
+    All files are in the same projection and resolution.
+    
+    """
+    high_file = gdal.Open(in_dir_high)
+    high_array = high_file.GetRasterBand(1).ReadAsArray()
+    low_file = gdal.Open(in_dir_low)
+    low_array = low_file.GetRasterBand(1).ReadAsArray()
+    out_array = high_array - low_array
+    
+    proj_wkt = high_file.GetProjection()   
+    geotrans = high_file.GetGeoTransform()
+    wide = high_file.RasterXSize
+    high = high_file.RasterYSize
+    nodata_high = high_file.GetRasterBand(1).GetNoDataValue()
+    nodata_low = low_file.GetRasterBand(1).GetNoDataValue()
+    for i in range(len(out_array)): # Fill in nodata values
+        for j in range(len(out_array[0])):
+            if high_array[i][j] == nodata_high or low_array[i][j] == nodata_low:
+                out_array[i][j] = nodata_high
+
+    outRaster = write_raster_to_file(out_dir, wide, high, geotrans, proj_wkt, nodata = nodata_high)
+    outband = outRaster.GetRasterBand(1)
+    outband.WriteArray(out_array)
+    outRaster.FlushCache()
+    outRaster = None
+    return None
+    

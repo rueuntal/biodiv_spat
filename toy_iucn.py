@@ -419,8 +419,7 @@ def reproj_raster_generic(in_file, out_dir, wide, high, geotrans, in_proj, out_p
     outRaster = write_raster_to_file(out_dir, wide, high, geotrans, out_proj, nodata = nodata)
     res = gdal.ReprojectImage(in_file, outRaster, in_proj, out_proj, alg)
     outRaster.FlushCache()
-    outRaster = None
-    return None
+    return outRaster
 
 def reproj_raster_pixel_size(in_dir, out_dir, pixel_size = 100000, alg = gdal.GRA_Bilinear, \
                              in_proj_name = 'latlong', out_proj_name = 'behrmann'):
@@ -463,9 +462,8 @@ def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, 
     wide = match_file.RasterXSize
     high = match_file.RasterYSize
     
-    reproj_raster_generic(in_file, out_dir, wide, high, match_geotrans, in_proj_wkt, match_proj_wkt, in_nodata)
-    
-    return None
+    out_raster = reproj_raster_generic(in_file, out_dir, wide, high, match_geotrans, in_proj_wkt, match_proj_wkt, in_nodata)
+    return out_raster
 
 def get_range_raster(in_dir_high, in_dir_low, out_dir):
     """Obtain the difference between two rasters and write to a new raster. 
@@ -496,4 +494,14 @@ def get_range_raster(in_dir_high, in_dir_low, out_dir):
     outRaster.FlushCache()
     outRaster = None
     return None
+    
+def raster_reproj_flat(in_dir, match_dir):
+    """Subfunction. Reproject a raster to match another file, then flatten the array to 1-D to be used in PCA."""
+    in_file = reproj_raster_to_match(in_dir, None, match_dir)
+    in_array = in_file.GetRasterBand(1).ReadAsArray()
+    in_nodata = in_file.GetRasterBand(1).GetNoDataValue()
+    in_flat = np.ravel(in_array)
+    in_flat = in_flat.astype('float')
+    in_flat[in_flat == in_nodata] = np.nan
+    return in_flat
     

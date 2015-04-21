@@ -7,6 +7,8 @@ from osgeo import ogr, osr, gdal
 import psycopg2
 import shapely.wkt, shapely.ops
 import multiprocessing
+from matplotlib.mlab import PCA
+import re
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -38,6 +40,17 @@ def write_raster_to_file(out_dir, wide, high, geotrans, proj_wkt, nodata = 0, dt
     outRaster.GetRasterBand(1).SetNoDataValue(nodata)
     outRaster.GetRasterBand(1).Fill(nodata)
     return outRaster    
+ 
+def get_distance_latlon(lat1, lon1, lat2, lon2):
+    """Compute the distance between two points given their latitudes and longitudes."""
+    R = 6373 * 10**3
+    lat1, lon1, lat2, lon2 = np.radians([lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = (sin(dlat/2))**2 + cos(lat1) * cos(lat2) * (sin(dlon/2))**2
+    c = 2 * atan2(sqrt(a), sqrt(1-a))
+    distance = R * c
+    return distance
     
 def reproj(in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
            out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
@@ -505,3 +518,100 @@ def raster_reproj_flat(in_dir, match_dir):
     in_flat[in_flat == in_nodata] = np.nan
     return in_flat
     
+def PCA_with_NA(array, num_axes):
+    """Perform PCA with an array (remove rows with nan), keep the specified number of axes, save to file."""
+    array_no_nan = array[~np.isnan(array).any(axis = 1)]
+    array_PCA = PCA(array_no_nan)
+    array_list = []
+    for i in range(array.shape[0]):
+        if np.isnan(array[i]).any(): array_list.append([np.nan] * num_axes)
+        else: 
+            row_proj = array_PCA.project(array[i])
+            array_list.append(list(row_proj[:num_axes]))       
+    return array_list
+
+def convert_point_latlon(x, y, proj = 'behrmann'):
+    """Convert a point to lat/lon."""
+    point = ogr.CreateGeometryFromWkt("POINT (" + str(x) + " " + str(y) + ")")
+    in_proj4 = proj_name_to_proj4(proj)
+    point_reproj = reproj_geom(point.ExportToWkt(), out_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', in_proj4 = in_proj4)    
+    lon, lat = re.findall(r'[+-]?\d+.\d+', point_reproj)
+    return float(lon), float(lat)
+
+def pixel_center_to_latlon(i, j, pixel_size = 100000, proj = 'behrmann'):
+    """Obtain the center of the pixel (ith row jth column from top left corner) and convert it to lat/lon."""
+    extent = proj_extent(proj)
+    xmin =  extent[0]
+    ymax = extent[3]
+    xcoord = xmin + j * pixel_size
+    ycoord = ymax - i * pixel_size
+    lon, lat = convert_point_latlon(xcoord, ycoord, proj = proj)
+    return lon, lat
+
+def comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius, pixel_size):
+    """Subfunction to obtain the Euclidean distance in environmental PCA between two pixels.
+    
+    inputs:
+    pca_out_flat - pca output summarizing the environmental variables in each pixel.
+    i, j, m, n - x and y coordinates of the two pixels in the raster.
+    ncol - number of columns in raster
+    radius - if distance between two pixels is larger than radius, return nan.
+    
+    """
+    if np.isnan(pca_out_flat[m * ncol + n]).any(): return np.nan
+    elif i == m and j == n: return np.nan
+    else:
+        if n >= ncol: n -= ncol # wrap to the other side if column is out of bound
+        elif n < 0: n += ncol
+        lon1, lat1 =  pixel_center_to_latlon(i, j, pixel_size = pixel_size)
+        lon2, lat2 = pixel_center_to_latlon(m, n, pixel_size = pixel_size)
+        dist = get_distance_latlon(lat1, lon1, lat2, lon2)
+        if dist > radius: return np.nan
+        else: return np.linalg.norm(np.array(pca_out_flat[i*ncol + j]) - np.array(pca_out_flat[m*ncol + n]))
+         
+def get_unique_raster(bio_dir, num_axes, radius, match_file, out_dir, \
+                      proj = 'behrmann', buffer = 1.3):
+    """Obtain the measure of uniqueness of each cell as compared to cells nearby, sensu Morueta et al. 
+    
+    Inputs:
+    bio_dir: folder with bioclim layers
+    num_axes: number of axes to keep in PCA
+    radius: radius of the circle centered on each cell, within which cells are compared with the focus cell
+    match_file: raster file as a template for calculations and the output
+    out_dir: directory of the output file
+    buffer: 
+    
+    """
+    # Get PCA
+    full_bio = []
+    for i in range(1, 20):
+        bio_i_dir = bio_dir + 'bio' + str(i) + '.bil'
+        bio_i_flat = raster_reproj_flat(bio_i_dir, match_dir)
+        full_bio.append(bio_i_flat)
+     
+    full_bio_array = np.asarray(full_bio)
+    full_bio_array = full_bio_array.T
+    pca_out_flat = PCA_with_NA(full_bio_array, num_axes)
+
+    match_file = gdal.Open(match_dir)
+    match_geotrans = match_file.GetGeoTransform()
+    xmin = match_geotrans[0]
+    ymax = match_geotrans[3]
+    pixel_size = match_geotrans[1]
+    out_array = create_array_for_raster([xmin, -xmin, -ymax, ymax], no_value = match_file.GetRasterBand(1).GetNoDataValue(), \
+                                        pixel_size = pixel_size)
+    nrow, ncol = out_array.shape
+    num_cells = int(np.ceil(radius * buffer / pixel_size))
+    for i in range(nrow):
+        for j in range(ncol):
+            if np.isnan(pca_out_flat[i*ncol + j]).any(): out_array[i][j] = np.nan
+            else:
+                ij_neighbour_distance = np.array([comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius) \
+                                         for m in range(max(0, i - num_cells), min(nrow, i + num_cells + 1)) \
+                                         for n in range(j - num_cells, j + num_cells + 1)])
+                ij_neighbour_distance = ij_neighbour_distance[~np.isnan(ij_neighbour_distance)]
+                out_array[i][j] = np.mean(ij_neighbour_distance)
+    
+    # Save to raster
+    convert_array_to_raster(out_array, [xmin, ymax], out_dir, pixel_size, no_value = match_file.GetRasterBand(1).GetNoDataValue())
+    return None

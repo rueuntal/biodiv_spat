@@ -9,6 +9,7 @@ import shapely.wkt, shapely.ops
 import multiprocessing
 from matplotlib.mlab import PCA
 import re
+from math import sin, cos, sqrt, atan2
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -543,8 +544,8 @@ def pixel_center_to_latlon(i, j, pixel_size = 100000, proj = 'behrmann'):
     extent = proj_extent(proj)
     xmin =  extent[0]
     ymax = extent[3]
-    xcoord = xmin + j * pixel_size
-    ycoord = ymax - i * pixel_size
+    xcoord = xmin + (j + 0.5) * pixel_size
+    ycoord = ymax - (i + 0.5) * pixel_size
     lon, lat = convert_point_latlon(xcoord, ycoord, proj = proj)
     return lon, lat
 
@@ -569,7 +570,7 @@ def comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius, pixel_size):
         if dist > radius: return np.nan
         else: return np.linalg.norm(np.array(pca_out_flat[i*ncol + j]) - np.array(pca_out_flat[m*ncol + n]))
          
-def get_unique_raster(bio_dir, num_axes, radius, match_file, out_dir, \
+def get_unique_raster(bio_dir, num_axes, radius, match_dir, out_dir, \
                       proj = 'behrmann', buffer = 1.3):
     """Obtain the measure of uniqueness of each cell as compared to cells nearby, sensu Morueta et al. 
     
@@ -585,7 +586,7 @@ def get_unique_raster(bio_dir, num_axes, radius, match_file, out_dir, \
     # Get PCA
     full_bio = []
     for i in range(1, 20):
-        bio_i_dir = bio_dir + 'bio' + str(i) + '.bil'
+        bio_i_dir = bio_dir + '\\bio' + str(i) + '.bil'
         bio_i_flat = raster_reproj_flat(bio_i_dir, match_dir)
         full_bio.append(bio_i_flat)
      
@@ -600,13 +601,14 @@ def get_unique_raster(bio_dir, num_axes, radius, match_file, out_dir, \
     pixel_size = match_geotrans[1]
     out_array = create_array_for_raster([xmin, -xmin, -ymax, ymax], no_value = match_file.GetRasterBand(1).GetNoDataValue(), \
                                         pixel_size = pixel_size)
+    out_array = out_array.astype(float)
     nrow, ncol = out_array.shape
     num_cells = int(np.ceil(radius * buffer / pixel_size))
     for i in range(nrow):
         for j in range(ncol):
             if np.isnan(pca_out_flat[i*ncol + j]).any(): out_array[i][j] = np.nan
             else:
-                ij_neighbour_distance = np.array([comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius) \
+                ij_neighbour_distance = np.array([comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius, pixel_size) \
                                          for m in range(max(0, i - num_cells), min(nrow, i + num_cells + 1)) \
                                          for n in range(j - num_cells, j + num_cells + 1)])
                 ij_neighbour_distance = ij_neighbour_distance[~np.isnan(ij_neighbour_distance)]

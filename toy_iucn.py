@@ -19,7 +19,7 @@ def import_pickle_file(in_dir):
     return in_obj
 
 def import_shapefile(in_dir): 
-    """Read in a .shp file and save the geometry each feature in a list of WKT."""
+    """Read in a .shp file and save the geometry of each feature in a list of WKT."""
     driver = ogr.GetDriverByName('ESRI Shapefile')
     datasource = driver.Open(in_dir, 0)
     layer = datasource.GetLayer()
@@ -43,7 +43,7 @@ def write_raster_to_file(out_dir, wide, high, geotrans, proj_wkt, nodata = 0, dt
     return outRaster    
  
 def get_distance_latlon(lat1, lon1, lat2, lon2):
-    """Compute the distance between two points given their latitudes and longitudes."""
+    """Compute the distance (in meters) between two points given their latitudes and longitudes (in degrees)."""
     R = 6373 * 10**3
     lat1, lon1, lat2, lon2 = np.radians([lat1, lon1, lat2, lon2])
     dlon = lon2 - lon1
@@ -86,30 +86,25 @@ def proj_extent(proj_name):
     """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
     in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
     out_proj4 = proj_name_to_proj4(proj_name)
-    
-    in_proj = osr.SpatialReference()
-    in_proj.ImportFromProj4(in_proj4)
-    out_proj = osr.SpatialReference()
-    out_proj.ImportFromProj4(out_proj4)
     transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
     
     x, y, z = transform.TransformPoint(180, 90)
     return [-x, x, -y, y]
 
-def weighted_sample_range_size(range_size_list, size):
+def weighted_sample_range_size(range_size_list, sample_size):
     """Generate a random sample of a certain size (length) from a list of range sizes,
     
     weighted by the range sizes.
     
     """
     sum_size = np.sum(range_size_list)
-    rand_unif = np.sort(stats.uniform.rvs(0, sum_size, size = size))
+    rand_unif = np.sort(stats.uniform.rvs(0, sum_size, size = sample_size))
     partial_sum = 0
     selected_range = []
     i, j = 0, 0
-    while len(selected_range) < size:
+    while len(selected_range) < sample_size:
         partial_sum += range_size_list[i]
-        while j < len(rand_unif) and partial_sum >= rand_unif[j]:
+        while j < sample_size and partial_sum >= rand_unif[j]:
             selected_range.append(range_size_list[i])
             j += 1
         i += 1
@@ -152,7 +147,7 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value 
     xmin, ymax = rasterOrigin
     geotrans = (xmin, pixel_size, 0, ymax, 0, -pixel_size)
     outRasterSRS = osr.SpatialReference()
-    outRasterSRS.ImportFromProj4(out_proj4)
+    outRasterSRS.ImportFromProj4(out_proj)
     proj_wkt = outRasterSRS.ExportToWkt()
     
     outRaster = write_raster_to_file(out_file, cols, rows, geotrans, proj_wkt, nodata = no_value)
@@ -182,11 +177,13 @@ def sp_reproj_birds(folder, file_name):
     in_dir = folder + '/' + file_name
     file_split = file_name.split('_')
     sp_name = file_split[0] + ' ' + file_split[1]
-    sp_driver = ogr.GetDriverByName('ESRI Shapefile')
-    sp_datasource = sp_driver.Open(folder + '/' + file_name, 0)
-    sp_layer = sp_datasource.GetLayer()
-    sp_feature = sp_layer[0]
-    sp_geom_wkt = sp_feature.GetGeometryRef().ExportToWkt()
+    sp_geom_list = import_shapefile(in_dir)
+    sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
+    try:
+        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+    except: 
+        sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
+        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
     wkt_reproj = reproj_geom(sp_geom_wkt) # Reproject to Behrmann
     return sp_name, wkt_reproj
 
@@ -368,6 +365,33 @@ def obtain_metrics_single(input_list):
     rand_dist_grid = weighted_sample_range_size(range_size_list, sample_size)
     metrics_single =  [metric_dist(rand_dist_grid, metric) for metric in metrics]
     return metrics_single
+
+def range_size_dists_raw(sp_list_array, range_size_dic, out_dir, out_name, metrics = ['mean', 'sd', 'skew'], marine_list = [], threshold = 5):    
+    """Obtain the mean, sd, and skewness of the range size distribution in each pixel and save to file."""
+    array_out_list = [np.empty([len(sp_list_array), len(sp_list_array[0])], dtype = float) for k in range(len(metrics))]
+        
+    for j in range(len(sp_list_array)):
+        for i in range(len(sp_list_array[0])):
+            sp_grid = sp_list_array[j][i]
+            # Remove marine species from local species list
+            sp_grid = [sp for sp in sp_grid if sp not in marine_list]
+            richness_grid = len(sp_grid)
+            if richness_grid < threshold: 
+                for k in range(len(metrics)):
+                    array_out_list[k][j][i] = -1 # Fill unanalyzed grids with -1
+            else:
+                emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
+                emp_metrics = [metric_dist(emp_range_dist_grid, metric) for metric in metrics]                
+                for k in range(len(metrics)):
+                    array_out_list[k][j][i] = emp_metrics[k]
+    
+    # Save to file
+    for k, metric in enumerate(metrics):
+        out_file_name = out_dir + '/' + out_name + '_' + metric + '.pkl'
+        out_file = open(out_file_name, 'wb')
+        cPickle.dump(array_out_list[k], out_file, protocol = 2)
+        out_file.close()
+    return None
     
 def compare_range_size_dists(sp_list_array, range_size_dic, out_dir, out_name, Nsample, metrics = ['mean', 'sd', 'skew'], marine_list = [], threshold = 5):
     """Compare with empirical range size distribution in each grid with the expected distribution, 
@@ -599,15 +623,16 @@ def get_unique_raster(bio_dir, num_axes, radius, match_dir, out_dir, \
     xmin = match_geotrans[0]
     ymax = match_geotrans[3]
     pixel_size = match_geotrans[1]
-    out_array = create_array_for_raster([xmin, -xmin, -ymax, ymax], no_value = match_file.GetRasterBand(1).GetNoDataValue(), \
-                                        pixel_size = pixel_size)
+    no_value = match_file.GetRasterBand(1).GetNoDataValue()
+    
+    # Comparison
+    out_array = create_array_for_raster([xmin, -xmin, -ymax, ymax], no_value = no_value, pixel_size = pixel_size)
     out_array = out_array.astype(float)
     nrow, ncol = out_array.shape
     num_cells = int(np.ceil(radius * buffer / pixel_size))
     for i in range(nrow):
         for j in range(ncol):
-            if np.isnan(pca_out_flat[i*ncol + j]).any(): out_array[i][j] = np.nan
-            else:
+            if not np.isnan(pca_out_flat[i*ncol + j]).any(): 
                 ij_neighbour_distance = np.array([comp_pixel_to_pixel(pca_out_flat, i, j, m, n, ncol, radius, pixel_size) \
                                          for m in range(max(0, i - num_cells), min(nrow, i + num_cells + 1)) \
                                          for n in range(j - num_cells, j + num_cells + 1)])
@@ -615,5 +640,5 @@ def get_unique_raster(bio_dir, num_axes, radius, match_dir, out_dir, \
                 out_array[i][j] = np.mean(ij_neighbour_distance)
     
     # Save to raster
-    convert_array_to_raster(out_array, [xmin, ymax], out_dir, pixel_size, no_value = match_file.GetRasterBand(1).GetNoDataValue())
+    convert_array_to_raster(out_array, [xmin, ymax], out_dir, pixel_size, no_value = no_value)
     return None

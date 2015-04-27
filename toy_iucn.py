@@ -97,6 +97,7 @@ def weighted_sample_range_size(range_size_list, sample_size):
     weighted by the range sizes.
     
     """
+    np.random.seed()
     sum_size = np.sum(range_size_list)
     rand_unif = np.sort(stats.uniform.rvs(0, sum_size, size = sample_size))
     partial_sum = 0
@@ -184,7 +185,7 @@ def sp_reproj_birds(folder, file_name):
     except: 
         sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    wkt_reproj = reproj_geom(sp_geom_wkt) # Reproject to Behrmann
+    wkt_reproj = reproj_geom(sp_geom_wkt) 
     return sp_name, wkt_reproj
 
 def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
@@ -351,7 +352,7 @@ def metric_dist(dist, metric):
     
     Inputs:
     dist: a list of range sizes, either emprirical or randomly generated.
-    metric: metric  to compute. See docstring for compare_range_size_dists() for details.    full_dist_expc: the expected values from the weighted full distribution of the same length as dist, only needed if metric = "ks".
+    metric: metric  to compute. See docstring for compare_range_size_dists() for details. 
     
     """
     log_dist = np.log(dist)
@@ -380,10 +381,9 @@ def range_size_dists_raw(sp_list_array, range_size_dic, out_dir, out_name, metri
                 for k in range(len(metrics)):
                     array_out_list[k][j][i] = -1 # Fill unanalyzed grids with -1
             else:
-                emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]
-                emp_metrics = [metric_dist(emp_range_dist_grid, metric) for metric in metrics]                
+                emp_range_dist_grid = [range_size_dic[sp] for sp in sp_grid]        
                 for k in range(len(metrics)):
-                    array_out_list[k][j][i] = emp_metrics[k]
+                    array_out_list[k][j][i] = metric_dist(emp_range_dist_grid, metrics[k])
     
     # Save to file
     for k, metric in enumerate(metrics):

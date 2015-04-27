@@ -545,12 +545,13 @@ def raster_reproj_flat(in_dir, match_dir, log = False):
         if min(in_flat) < 0: 
             print "Error: cannot log-transform negative values."
             return in_flat
-        elif min(in_flat) == 0: in_flat[in_flat == 0] = 1 # replace zeros with 1's
-        in_flat = np.log(in_flat)
+        else:
+            in_flat[in_flat == 0] = 1 # replace zeros with 1's
+            in_flat = np.log(in_flat)       
     return in_flat
     
 def PCA_with_NA(array, num_axes):
-    """Perform PCA with an array (remove rows with nan), keep the specified number of axes, save to file."""
+    """Perform PCA with an array (remove rows with nan), and keep the specified number of axes."""
     array_no_nan = array[~np.isnan(array).any(axis = 1)]
     array_PCA = PCA(array_no_nan)
     array_list = []
@@ -574,7 +575,7 @@ def pixel_center_to_latlon(i, j, pixel_size = 100000, proj = 'behrmann'):
     """Obtain the center of the pixel (ith row jth column from top left corner) and convert it to lat/lon."""
     extent = proj_extent(proj)
     xmin =  extent[0]
-    ymax = extent[3]
+    ymax = extent[3] # The top left corner is xmin-ymax
     xcoord = xmin + (j + 0.5) * pixel_size
     ycoord = ymax - (i + 0.5) * pixel_size
     lon, lat = convert_point_latlon(xcoord, ycoord, proj = proj)
@@ -616,9 +617,12 @@ def get_unique_raster(bio_dir, num_axes, radius, match_dir, out_dir, \
     """
     # Get PCA
     full_bio = []
+    log_trans_list = [3, 12, 13, 14, 16, 17, 18, 19] # Layers to be log-transformed 
     for i in range(1, 20):
         bio_i_dir = bio_dir + '\\bio' + str(i) + '.bil'
-        bio_i_flat = raster_reproj_flat(bio_i_dir, match_dir)
+        if i in log_trans_list: 
+            bio_i_flat = raster_reproj_flat(bio_i_dir, match_dir, log = True)
+        else: bio_i_flat = raster_reproj_flat(bio_i_dir, match_dir)
         full_bio.append(bio_i_flat)
      
     full_bio_array = np.asarray(full_bio)

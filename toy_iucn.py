@@ -533,7 +533,7 @@ def get_range_raster(in_dir_high, in_dir_low, out_dir):
     outRaster = None
     return None
     
-def raster_reproj_flat(in_dir, match_dir):
+def raster_reproj_flat(in_dir, match_dir, log = False):
     """Subfunction. Reproject a raster to match another file, then flatten the array to 1-D to be used in PCA."""
     in_file = reproj_raster_to_match(in_dir, None, match_dir)
     in_array = in_file.GetRasterBand(1).ReadAsArray()
@@ -541,6 +541,12 @@ def raster_reproj_flat(in_dir, match_dir):
     in_flat = np.ravel(in_array)
     in_flat = in_flat.astype('float')
     in_flat[in_flat == in_nodata] = np.nan
+    if log:
+        if min(in_flat) < 0: 
+            print "Error: cannot log-transform negative values."
+            return in_flat
+        elif min(in_flat) == 0: in_flat[in_flat == 0] = 1 # replace zeros with 1's
+        in_flat = np.log(in_flat)
     return in_flat
     
 def PCA_with_NA(array, num_axes):
@@ -559,7 +565,8 @@ def convert_point_latlon(x, y, proj = 'behrmann'):
     """Convert a point to lat/lon."""
     point = ogr.CreateGeometryFromWkt("POINT (" + str(x) + " " + str(y) + ")")
     in_proj4 = proj_name_to_proj4(proj)
-    point_reproj = reproj_geom(point.ExportToWkt(), out_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', in_proj4 = in_proj4)    
+    out_proj4 = proj_name_to_proj4('latlong')
+    point_reproj = reproj_geom(point.ExportToWkt(), out_proj4 = out_proj4, in_proj4 = in_proj4)    
     lon, lat = re.findall(r'[+-]?\d+.\d+', point_reproj)
     return float(lon), float(lat)
 

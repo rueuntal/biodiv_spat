@@ -10,6 +10,7 @@ import multiprocessing
 from matplotlib.mlab import PCA
 import re
 from math import sin, cos, sqrt, atan2
+import csv
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -28,6 +29,20 @@ def import_shapefile(in_dir):
         geom_list.append(feature.GetGeometryRef().ExportToWkt())
     return geom_list
 
+def range_dic_to_csv(in_dir, out_dir, marine_list = []):
+    """Read in a dictionary of range sizes for a taxon and convert it to csv for processing in R."""
+    range_dic = import_pickle_file(in_dir)
+    out_write = open(out_dir, 'wb')
+    out = csv.writer(out_write)
+    
+    for sp in range_dic.keys():
+        if sp not in marine_list:
+            results = np.zeros((1, ), dtype = ('S25, f15'))
+            results['f0'] = sp
+            results['f1'] = range_dic[sp]
+            out.writerows(results)
+    out_write.close()
+    
 def write_raster_to_file(out_dir, wide, high, geotrans, proj_wkt, nodata = 0, dtype = gdal.GDT_Float32):    
     """Create an empty raster at a specified path (in memory if path is None), define geotransform, projection, nodata etc. 
     

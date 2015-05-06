@@ -114,16 +114,8 @@ def weighted_sample_range_size(range_size_list, sample_size):
     """
     np.random.seed()
     sum_size = np.sum(range_size_list)
-    rand_unif = np.sort(stats.uniform.rvs(0, sum_size, size = sample_size))
-    partial_sum = 0
-    selected_range = []
-    i, j = 0, 0
-    while len(selected_range) < sample_size:
-        partial_sum += range_size_list[i]
-        while j < sample_size and partial_sum >= rand_unif[j]:
-            selected_range.append(range_size_list[i])
-            j += 1
-        i += 1
+    selected_range = np.random.choice(range_size_list, size = sample_size, replace = False, \
+                                      p = np.array(range_size_list) / sum_size)
     return selected_range
 
 def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 100000):

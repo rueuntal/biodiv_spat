@@ -16,11 +16,11 @@ def global_range_size(mu, sigma, S, max_size):
         sizes = np.append(sizes, additional_ranges)
     return sizes
 
-def convert_2D_to_1D(i, j, width, height):
+def convert_2D_to_1D(i, j, width):
     """Convert [i, j] in a grid with known width and height to 1-D index."""
     return j * width + i
 
-def convert_1D_to_2D(index, width, height):
+def convert_1D_to_2D(index, width):
     """Convert a 1-D index back to [i, j] in grid."""
     j = int(np.floor(index / width))
     i = index - j * width
@@ -57,7 +57,12 @@ def ind_range_generator(width, height, size, continuous = False, env = False, en
     else: p = None
     if not continuous:
         loc_sp = choice(range(width * height), size = size_grid, replace = False, p = p)
-        
+        for loc in loc_sp:
+            i, j = convert_1D_to_2D(loc, width)
+            spatial_range[j][i] == True
+    #else: 
+    return spatial_range
+
 def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False):
     """Simulate species range sizes on a landscape and explore their correlations with overall diversity.
     

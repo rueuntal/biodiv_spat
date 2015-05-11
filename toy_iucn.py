@@ -487,7 +487,7 @@ def reproj_raster_pixel_size(in_dir, out_dir, pixel_size = 100000, alg = gdal.GR
     reproj_raster_generic(in_file, out_dir, wide, high, out_geotrans, in_proj_wkt, out_proj_wkt, in_nodata)
     return None
     
-def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, \
+def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, no_data = None, \
                   in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
                   out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
     """Similar to reproj_raster(), but the reprojected/resampled raster matches the grids of another raster."""
@@ -500,6 +500,16 @@ def reproj_raster_to_match(in_dir, out_dir, match_dir, alg = gdal.GRA_Bilinear, 
         in_proj.ImportFromProj4(in_proj4)
         in_proj_wkt = in_proj.ExportToWkt()
     in_nodata = in_file.GetRasterBand(1).GetNoDataValue()
+    if no_data is not None: # Self-define nodata value
+        in_wide = in_file.RasterXSize
+        in_high = in_file.RasterYSize
+        in_geotrans = in_file.GetGeoTransform()
+        in_array = in_file.GetRasterBand(1).ReadAsArray()
+        in_array[in_array == in_nodata] = no_data
+        new_file = write_raster_to_file(None, in_wide, in_high, in_geotrans, in_proj_wkt, nodata = no_data)
+        new_file.GetRasterBand(1).WriteArray(in_array)
+        in_file = new_file
+        in_nodata = no_data
   
     match_file = gdal.Open(match_dir)
     match_proj_wkt = match_file.GetProjection()

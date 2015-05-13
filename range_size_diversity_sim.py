@@ -108,7 +108,7 @@ def ind_range_generator(width, height, size, continuous = False, env = 0, env_la
         loc_sp = ind_range_continuous(width, height, size_grid, env_p = p)
     for loc in loc_sp:
         i, j = convert_1D_to_2D(loc, width)
-        spatial_range[j][i] == True
+        spatial_range[j][i] = True
     return spatial_range
 
 def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, env = 0, r = 0):
@@ -139,8 +139,8 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, en
     """
     sp_range_list = np.sort(global_range_size(mu, sigma, S, height * width))
     sp_range_array_list = []
-    richness_landscape = np.empty([height, width], dtype = bool)
-    richness_landscape.fill(False)
+    richness_landscape = np.empty([height, width], dtype = int)
+    richness_landscape.fill(0)
     richness_from_low = copy.deepcopy(richness_landscape)
     richness_from_high = copy.deepcopy(richness_landscape)
     richness_quar1 = copy.deepcopy(richness_landscape)
@@ -163,17 +163,17 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, en
     
     # Analysis
     for i in range(S):
-        richness_from_low += sp_range_landscape[i]
-        r_low.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape)))
-        richness_from_high += sp_range_landscape[S - i - 1]
-        r_high.append(pearsonr(np.ravel(richness_from_high), np.ravel(richness_landscape)))
-        if i < S * 0.25: richness_quar1 += sp_range_landscape[i]
-        elif i < S * 0.5: richness_quar2 += sp_range_landscape[i]
-        elif i < S * 0.75: richness_quar3 += sp_range_landscape[i]
-        else: richness_quar4 += sp_range_landscape[i]
+        richness_from_low += sp_range_array_list[i]
+        r_low.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape))[0])
+        richness_from_high += sp_range_array_list[S - i - 1]
+        r_high.append(pearsonr(np.ravel(richness_from_high), np.ravel(richness_landscape))[0])
+        if i < S * 0.25: richness_quar1 += sp_range_array_list[i]
+        elif i < S * 0.5: richness_quar2 += sp_range_array_list[i]
+        elif i < S * 0.75: richness_quar3 += sp_range_array_list[i]
+        else: richness_quar4 += sp_range_array_list[i]
     
     for quar in [richness_quar1, richness_quar2, richness_quar3, richness_quar4]:
-        r_quartile.append(pearsonr(np.ravel(quar), np.ravel(richness_landscape)))
+        r_quartile.append(pearsonr(np.ravel(quar), np.ravel(richness_landscape))[0])
     
     return r_quartile, r_low, r_high
     

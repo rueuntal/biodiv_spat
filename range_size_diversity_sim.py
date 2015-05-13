@@ -1,6 +1,8 @@
 from __future__ import division
 import numpy as np
 import scipy.stats
+import copy
+from scipy.stats.stats import pearsonr
 
 def global_range_size(mu, sigma, S, max_size):
     """Generate a global range size distribution with S species from a
@@ -52,8 +54,8 @@ def ind_range_continuous(width, height, Nsize, env_p = None):
     range_set = set([])
     edge_set = set([])
     loc = np.random.choice(range(width * height), size = 1, p = env_p)
+    range_set.update(loc)
     while len(range_set) < Nsize:
-        range_set.update(loc)
         i, j = convert_1D_to_2D(loc, width)
         new_edges = new_edge_cells(i, j, width, height)
         new_edges_1D = [convert_2D_to_1D(cell[0], cell[1], width) for cell in new_edges]
@@ -67,10 +69,11 @@ def ind_range_continuous(width, height, Nsize, env_p = None):
         else: p_edge = None
         loc = np.random.choice(edge_list, size = 1, p = p_edge)
         edge_set.remove(int(loc))
+        range_set.update(loc)
     
     return np.array(list(range_set))
         
-def ind_range_generator(width, height, size, continuous = False, env = False, env_landscape = None, r = None):
+def ind_range_generator(width, height, size, continuous = False, env = 0, env_landscape = None, r = None):
     """Generate the spatial range of one species on the landscale.
     
     Inputs:
@@ -108,7 +111,7 @@ def ind_range_generator(width, height, size, continuous = False, env = False, en
         spatial_range[j][i] == True
     return spatial_range
 
-def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False):
+def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, env = 0, r = 0):
     """Simulate species range sizes on a landscape and explore their correlations with overall diversity.
     
     Input:
@@ -117,13 +120,60 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False):
     S - total number of species
     continuous - whether the range of each species is continuous or scattered. If True, the range is in one polygon. If False,
         each cell is randomly assigned.
+    env - number of environmental factors correlated with spatial distribution of ranges. 0 (default) means that the ranges
+        do not correlate with any environmental factors and are randomly distributed. 1 means that all ranges are driven
+        by the same factor. 2 means that 1/4 of the species having the largest ranges are driven by one factor, while the other
+        species are driven by another. 
+    r - correlation coefficient between (transformed) probability of species presence and
+        environmental variable. Only needed when env = True. Called in subfunction ind_range_generator() when there is 
+        environmental gradient.
     
     Output: 
-    r2_quartile -  a list with 4 R^2 values showing correlation between richness in each range size quartile and overall 
+    r_quartile -  a list with 4 correation coefficient r showing correlation between richness in each range size quartile and overall 
         richness, from the smallest species to the largest species.
-    r2_low - a list of length S, with R^2 between total diversity and cumulative diversity from the smallest-ranged species to
+    r_low - a list of length S, with r between total diversity and cumulative diversity from the smallest-ranged species to
         the largest-ranged species.
-    r2_high - a list of length S, with R^2 between total diversity and cumulative diversity from the largest-ranged species to
+    r_high - a list of length S, with r between total diversity and cumulative diversity from the largest-ranged species to
         the smallest-ranged species.
     
     """
+    sp_range_list = np.sort(global_range_size(mu, sigma, S, height * width))
+    sp_range_array_list = []
+    richness_landscape = np.empty([height, width], dtype = bool)
+    richness_landscape.fill(False)
+    richness_from_low = copy.deepcopy(richness_landscape)
+    richness_from_high = copy.deepcopy(richness_landscape)
+    richness_quar1 = copy.deepcopy(richness_landscape)
+    richness_quar2 = copy.deepcopy(richness_landscape)
+    richness_quar3 = copy.deepcopy(richness_landscape)
+    richness_quar4 = copy.deepcopy(richness_landscape)
+    r_low, r_high, r_quartile = [], [], []
+    
+    if env == 0: env_list = [0, 0]
+    # elif env == 1: generate landscape, env_list = [landscape, landscape]
+    # elif env == 2: env_list = [generate landscape 1, generate landscape 2]
+    
+    for i, size in enumerate(sp_range_list):
+        if i < S * 0.75: sp_range_landscape = ind_range_generator(width, height, size, continuous = continuous, \
+                                                                  env = env, env_landscape = env_list[0], r = r)
+        else: sp_range_landscape = ind_range_generator(width, height, size, continuous = continuous, \
+                                                                env = env, env_landscape = env_list[1], r = r)
+        sp_range_array_list.append(sp_range_landscape)
+        richness_landscape += sp_range_landscape
+    
+    # Analysis
+    for i in range(S):
+        richness_from_low += sp_range_landscape[i]
+        r_low.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape)))
+        richness_from_high += sp_range_landscape[S - i - 1]
+        r_high.append(pearsonr(np.ravel(richness_from_high), np.ravel(richness_landscape)))
+        if i < S * 0.25: richness_quar1 += sp_range_landscape[i]
+        elif i < S * 0.5: richness_quar2 += sp_range_landscape[i]
+        elif i < S * 0.75: richness_quar3 += sp_range_landscape[i]
+        else: richness_quar4 += sp_range_landscape[i]
+    
+    for quar in [richness_quar1, richness_quar2, richness_quar3, richness_quar4]:
+        r_quartile.append(pearsonr(np.ravel(quar), np.ravel(richness_landscape)))
+    
+    return r_quartile, r_low, r_high
+    

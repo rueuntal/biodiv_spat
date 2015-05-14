@@ -176,4 +176,22 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, en
         r_quartile.append(pearsonr(np.ravel(quar), np.ravel(richness_landscape))[0])
     
     return r_quartile, r_low, r_high
+
+def sim_range_size_landscape_Niter(width, height, mu, sigma, S, Niter, out_dir, out_name, 
+                                   continuous = False, env = 0, r = 0):
+    """Run sim_range_size_landscape_Niter multiple times and save the three output lists into txt files 
     
+    with names out_dir + out_name + '_quartile.txt'/'_low.txt'/'_high.txt'. 
+    
+    """
+    out_file_extension = ['_quartile.txt', '_low.txt', '_high.txt']
+    for i in range(Niter):
+        three_rs = sim_range_size_landscape(width, height, mu, sigma, S, 
+                                                             continuous = continuous, env = env, r = r)
+        for j in range(len(out_file_extension)):
+            out_file = out_dir + '/' + out_name + out_file_extension[j]
+            out_file_write = open(out_file, 'a')
+            r_list = three_rs[j]
+            print>>out_file_write, '\t'.join([str(round(x, 5)) for x in r_list])
+            out_file_write.close()
+            

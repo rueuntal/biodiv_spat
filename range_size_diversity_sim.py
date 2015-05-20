@@ -77,7 +77,7 @@ def ind_range_continuous(width, height, Nsize, env_p = None):
         edge_set.update(new_edges_1D)
         # Obtain p for edge cells
         edge_list = list(edge_set)
-        if env_p: 
+        if env_p is not None: 
             p_edge = [env_p[index] for index in edge_list]
             p_edge = np.array(p_edge)  / np.sum(p_edge)
         else: p_edge = None
@@ -160,7 +160,7 @@ def env_fine_generator(width, height, num_peak = 5):
         peak_size = scipy.stats.uniform.rvs(500, 500, size = 1)[0] # this is more or less arbitrarily defined
         n = scipy.stats.randint.rvs(0, height) # the location of peak
         m = scipy.stats.randint.rvs(0, width)
-        env_landscape = [[env_landscape[j][i] + peak_size * np.exp((-(i - m) ** 2 - (j - n) ** 2) / 15) \
+        env_landscape = [[env_landscape[j][i] + peak_size * np.exp((-(i - m) ** 2 - (j - n) ** 2) / 100) \
                           for i in range(width)] for j in range(height)]
     return env_landscape
     

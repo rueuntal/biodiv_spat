@@ -133,6 +133,7 @@ def env_broad_generator(width, height):
     y coordinates all have the same values. 
     
     """
+    np.random.seed()
     loc_peak = scipy.stats.randint.rvs(0, height)
     env_landscape = np.empty([height, width], dtype = float)
     env_landscape[loc_peak] = np.array([0] * width)
@@ -145,6 +146,24 @@ def env_broad_generator(width, height):
         j += 1
     return env_landscape
 
+def env_fine_generator(width, height, num_peak = 5):
+    """Generate the landscape of one environmental factor.
+    
+    The factor is assumed to be fine-grained. A few (num_peak) peaks are chosen uniformly 
+    across the landscape. Peak values are randomly chosen from  
+    
+    """
+    np.random.seed()
+    env_landscape = np.empty([height, width], dtype = float)
+    env_landscape.fill(0)
+    for peak in range(num_peak):
+        peak_size = scipy.stats.uniform.rvs(500, 500, size = 1)[0] # this is more or less arbitrarily defined
+        n = scipy.stats.randint.rvs(0, height) # the location of peak
+        m = scipy.stats.randint.rvs(0, width)
+        env_landscape = [[env_landscape[j][i] + peak_size * np.exp((-(i - m) ** 2 - (j - n) ** 2) / 15) \
+                          for i in range(width)] for j in range(height)]
+    return env_landscape
+    
 def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, env = 0, r = 0):
     """Simulate species range sizes on a landscape and explore their correlations with overall diversity.
     
@@ -184,7 +203,9 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, en
     r_low, r_high, r_quartile = [], [], []
     
     if env == 0: env_list = [0, 0]
-    # elif env == 1: generate landscape, env_list = [landscape, landscape]
+    elif env == 1: 
+        env_1 = env_broad_generator(width, height)
+        env_list = [env1, env1]
     # elif env == 2: env_list = [generate landscape 1, generate landscape 2]
     
     for i, size in enumerate(sp_range_list):

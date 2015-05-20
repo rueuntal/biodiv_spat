@@ -143,7 +143,7 @@ def env_broad_generator(width, height):
         i += 1
     while j >= 0:
         env_landscape[j] = np.array([j - loc_peak] * width)
-        j += 1
+        j -= 1
     return env_landscape
 
 def env_fine_generator(width, height, num_peak = 5):
@@ -203,10 +203,11 @@ def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, en
     r_low, r_high, r_quartile = [], [], []
     
     if env == 0: env_list = [0, 0]
-    elif env == 1: 
+    else: 
         env_1 = env_broad_generator(width, height)
-        env_list = [env1, env1]
-    # elif env == 2: env_list = [generate landscape 1, generate landscape 2]
+        env_2 = env_fine_generator(width, height)
+        if env == 1: env_list = [env_1, env_2]
+        else: env_list = [env_1, env_2]
     
     for i, size in enumerate(sp_range_list):
         if i < S * 0.75: sp_range_landscape = ind_range_generator(width, height, size, continuous = continuous, \

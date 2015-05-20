@@ -3,6 +3,7 @@ import numpy as np
 import scipy.stats
 import copy
 from scipy.stats.stats import pearsonr
+import matplotlib.pyplot as plt
 
 def global_range_size(mu, sigma, S, max_size):
     """Generate a global range size distribution with S species from a
@@ -28,6 +29,19 @@ def convert_1D_to_2D(index, width):
     i = int(index - j * width)
     return i, j
 
+def view_2D_array(array):
+    """Color plot a 2-D array for quick and dirty visualization of its values.
+    
+    Obtained from http://stackoverflow.com/questions/16492830/colorplot-of-2d-array-matplotlib.
+    
+    """
+    fig = plt.figure(figsize = (6, 6))
+    ax = fig.add_subplot(111)
+    plt.imshow(array)
+    ax.set_aspect('equal')
+    plt.colorbar(orientation = 'vertical')
+    plt.show()
+    
 def new_edge_cells(i, j, width, height):
     """Given the position of the focal cell [i, j], return the location of its 4 surrouding cells, 
     
@@ -110,6 +124,26 @@ def ind_range_generator(width, height, size, continuous = False, env = 0, env_la
         i, j = convert_1D_to_2D(loc, width)
         spatial_range[j][i] = True
     return spatial_range
+
+def env_broad_generator(width, height):
+    """Generate the landscape of one environmental factor.
+    
+    The factor is assumed to be broad-stroked, with a central peak uniformly chosen along the y-axis 
+    of the landscape, and values linearly decreasing from the peak towards the edge. Cells having the same 
+    y coordinates all have the same values. 
+    
+    """
+    loc_peak = scipy.stats.randint.rvs(0, height)
+    env_landscape = np.empty([height, width], dtype = float)
+    env_landscape[loc_peak] = np.array([0] * width)
+    i, j = loc_peak + 1, loc_peak - 1
+    while i < height:
+        env_landscape[i] = np.array([loc_peak - i] * width)
+        i += 1
+    while j >= 0:
+        env_landscape[j] = np.array([j - loc_peak] * width)
+        j += 1
+    return env_landscape
 
 def sim_range_size_landscape(width, height, mu, sigma, S, continuous = False, env = 0, r = 0):
     """Simulate species range sizes on a landscape and explore their correlations with overall diversity.

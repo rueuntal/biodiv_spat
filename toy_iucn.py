@@ -19,11 +19,14 @@ def import_pickle_file(in_dir):
     in_file.close()
     return in_obj
 
-def import_shapefile(in_dir): 
+def import_shapefile(in_dir, Attr = None, AttrFilter = None): 
     """Read in a .shp file and save the geometry of each feature in a list of WKT."""
     driver = ogr.GetDriverByName('ESRI Shapefile')
     datasource = driver.Open(in_dir, 0)
     layer = datasource.GetLayer()
+    if Attr:
+        filter_string = Attr + "='" + AttrFilter + "'"
+        layer.SetAttributeFilter(filter_string)
     geom_list = []
     for feature in layer:
         geom_list.append(feature.GetGeometryRef().ExportToWkt())

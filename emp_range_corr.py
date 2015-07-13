@@ -74,7 +74,7 @@ def corr_richness_taxon_continet(taxon, continent):
     sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
     sp_accumu_quart_global = np.zeros((4, len(sp_list_flat)))
     
-    r2_ind = np.zeros((4, len(sp_list_flat)))
+    r2_ind = np.zeros((4, len(sp_set)))
     r2_quart = np.zeros((2, 4))
     
     for j in range(len(sp_set)): # Loop through species

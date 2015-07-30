@@ -65,10 +65,13 @@ def corr_richness_taxon_continent(taxon, continent):
             except: 
                 sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
-            sp_range = shapely.wkt.loads(ti.sp_reproj(sp_geom_wkt))
+            sp_range = shapely.wkt.loads(ti.reproj_geom(sp_geom_wkt))
         
         # Try shapely instead of ogr
-        sp_cont_range = (sp_range.intersection(cont_shape)).area
+        try: sp_cont_range = (sp_range.intersection(cont_shape)).area
+        except:
+            sp_range = sp_range.buffer(0)
+            sp_cont_range = (sp_range.intersection(cont_shape)).area
         sp_cont_range_list.append(sp_cont_range)
     
     taxon_cont_richness = [len(grid) for grid in sp_list_flat] 
@@ -91,7 +94,7 @@ def corr_richness_taxon_continent(taxon, continent):
                 sp_accumu_quart_cont[np.floor(j / len(sp_set) * 4)] += sp_dist
     
     for i in range(4):
-        r2_quart[1][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
+        r2_quart[0][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
         
     # Save output 
     ind_header = [['continent', 'low'], ['continent', 'high']]
@@ -151,8 +154,7 @@ def plot_ind_accum(list_of_lists_of_r2, ax):
 if __name__ == '__main__':        
     taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
     # For simplicity, use default continent in shp file
-    continent_list = ['Asia', 'North America', 'Europe', 'Africa', 'South America', 
-                      'Oceania', 'Australia']
+    continent_list = ['Asia', 'North America', 'Europe', 'Africa', 'South America']
     for taxon in taxon_list:
         for continent in continent_list:
             corr_richness_taxon_continent(taxon, continent)

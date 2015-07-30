@@ -15,7 +15,7 @@ import glob
 import shapely
 from scipy.stats.stats import pearsonr
 
-def corr_richness_taxon_continent(taxon, continent):
+def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     """Obtain the correlation between overall richness and partial richness (by adding species one by one)
     
     for one taxon on a given continent.
@@ -23,13 +23,15 @@ def corr_richness_taxon_continent(taxon, continent):
     taxon - string, name of the taxon.
     continent - string, name of the continent. Can take one of seven values: Asia, North America,
         Europe, Africa, South  America, Oceania, Australia.
+    sp_filter - species used in the analysis. If 'all', all species are included. If 'lower', only species with the lower 3/4 ranges
+        on the given continent are included. 
         
     Outputs:
     Two txt files saved to disc. 
-    ind_sp_corr.txt: r versus species accumulation. 
+    ind_sp_corr.txt or ind_sp_corr_lower.txt: r versus species accumulation. 
         Columns: taxon, continent, global/continent, high/low, r from species 1 to species S.
-    quart_corr.txt: r between overall richness and richness of each quartile of range sizes. 
-        Columns: taxon, continent, global/continent, four r values.
+    quart_corr.txt or quart_corr_lower.txt: r between overall richness and richness of each quartile of range sizes. 
+        Columns: taxon, continent, global/continent, four or three r values.
     """
     proj_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\'
     pixel_size = 100000
@@ -39,13 +41,12 @@ def corr_richness_taxon_continent(taxon, continent):
         postgis_cur = tables.cursor()
     
     sp_list_array = ti.import_pickle_file(proj_dir + 'IUCN_sp_lists\\' + taxon + '_100000.pkl')
-    sp_global_range = ti.import_pickle_file(proj_dir + 'IUCN_sp_lists\\' + taxon + '_range_size.pkl')
     conts_dir = proj_dir + 'continents\\continent.shp'
     cont_geom  = ti.reproj_geom(ti.import_shapefile(conts_dir, Attr = 'CONTINENT', AttrFilter = continent)[0])
     cont_array = ti.create_array_for_raster(ti.proj_extent('behrmann'), geom = cont_geom, pixel_size = pixel_size) 
     sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
                     if cont_array[i][j] == 1]
-    sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells
+    sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells with no species from the given taxon.
     sp_set = list(set([sp for grid in sp_list_flat for sp in grid]))
     
     # Obtain range size on continent
@@ -73,19 +74,25 @@ def corr_richness_taxon_continent(taxon, continent):
             sp_range = sp_range.buffer(0)
             sp_cont_range = (sp_range.intersection(cont_shape)).area
         sp_cont_range_list.append(sp_cont_range)
-    
-    taxon_cont_richness = [len(grid) for grid in sp_list_flat] 
+   
+   # Rank species based on their range sizes on the continent 
     sp_order_cont = [sp for (area, sp) in sorted(zip(sp_cont_range_list, sp_set))]
+    if sp_filter is not 'all': sp_order_cont = sp_order_cont[:int(np.floor(len(sp_order_cont) * 0.75))]
+    taxon_cont_richness = [len([x for x in grid if x in sp_order_cont]) for grid in sp_list_flat] 
     orders = [sp_order_cont, sp_order_cont[::-1]] # 07/29/15: Only look at continental range distributions
     
     sp_accumu_ind = np.zeros((2, len(sp_list_flat)))
-    sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
+    r_ind = np.zeros((2, len(sp_set)))
     
-    r2_ind = np.zeros((2, len(sp_set))) # Note that the arrays are mistakenly names r^2 but they are actually r.
-    r2_quart = np.zeros((1, 4))
+    if sp_filter is 'all': 
+        sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
+        r2_quart = np.zeros((1, 4))
+    else: 
+        sp_accumu_quart_cont = np.zeros((3, len(sp_list_flat)))
+        r2_quart = np.zeros((1, 3))        
     
-    for j in range(len(sp_set)): # Loop through species
-        for i in range(2): # Loop through four different ways to accumulate species
+    for j in range(len(sp_order_cont)): # Loop through species
+        for i in range(2): # Loop through two ways to accumulate species - from the lower end, or from the higher end
             sp = orders[i][j]
             sp_dist = np.array([1 if sp in grid else 0 for grid in sp_list_flat])
             sp_accumu_ind[i] += sp_dist
@@ -93,19 +100,23 @@ def corr_richness_taxon_continent(taxon, continent):
             if i == 0: # If the order is low to high, continent
                 sp_accumu_quart_cont[np.floor(j / len(sp_set) * 4)] += sp_dist
     
-    for i in range(4):
+    for i in range(len(sp_accumu_quart_cont)):
         r2_quart[0][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
         
     # Save output 
     ind_header = [['continent', 'low'], ['continent', 'high']]
-    quart_header = [['continent']]
-    out_ind = open(proj_dir + 'emp_range_corr\\ind_sp_corr.txt', 'a')
-    out_quart = open(proj_dir + 'emp_range_corr\\quart_corr.txt', 'a')
+    if sp_filter is 'all': 
+        out_ind = open(proj_dir + 'emp_range_corr\\ind_sp_corr.txt', 'a')
+        out_quart = open(proj_dir + 'emp_range_corr\\quart_corr.txt', 'a')
+    else:
+        out_ind = open(proj_dir + 'emp_range_corr\\ind_sp_corr_lower.txt', 'a')
+        out_quart = open(proj_dir + 'emp_range_corr\\quart_corr_lower.txt', 'a')
+        
     for i, r2_ind_row in enumerate(r2_ind):
         out_row = [taxon, continent] + ind_header[i] + list(r2_ind_row)
         print>>out_ind, '\t'.join(map(str, out_row))
     for j, r2_quart_row in enumerate(r2_quart):
-        out_row_quart = [taxon, continent] + quart_header[j] + list(r2_quart_row)
+        out_row_quart = [taxon, continent] + 'continent' + list(r2_quart_row)
         print>>out_quart, '\t'.join(map(str, out_row_quart))
     out_ind.close()
     out_quart.close()
@@ -158,6 +169,7 @@ if __name__ == '__main__':
     for taxon in taxon_list:
         for continent in continent_list:
             corr_richness_taxon_continent(taxon, continent)
+            corr_richness_taxon_continent(taxon, continent, sp_filter = 'lower')
             
     # Plot results
     #ranking_list = ['continent']

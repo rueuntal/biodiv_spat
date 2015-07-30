@@ -3,6 +3,9 @@ to see if what Jetz and Rahbek found always hold."""
 from __future__ import division
 import sys
 sys.path.append('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox')
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 import toy_iucn as ti
 import psycopg2
@@ -12,7 +15,7 @@ import glob
 import shapely
 from scipy.stats.stats import pearsonr
 
-def corr_richness_taxon_continet(taxon, continent):
+def corr_richness_taxon_continent(taxon, continent):
     """Obtain the correlation between overall richness and partial richness (by adding species one by one)
     
     for one taxon on a given continent.
@@ -22,7 +25,11 @@ def corr_richness_taxon_continet(taxon, continent):
         Europe, Africa, South  America, Oceania, Australia.
         
     Outputs:
-    
+    Two txt files saved to disc. 
+    ind_sp_corr.txt: r versus species accumulation. 
+        Columns: taxon, continent, global/continent, high/low, r from species 1 to species S.
+    quart_corr.txt: r between overall richness and richness of each quartile of range sizes. 
+        Columns: taxon, continent, global/continent, four r values.
     """
     proj_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\'
     pixel_size = 100000
@@ -42,30 +49,36 @@ def corr_richness_taxon_continet(taxon, continent):
     sp_global_range_list = [sp_global_range[sp] for sp in sp_set]
     
     # Obtain range size on continent
-    cont_shape = ogr.CreateGeometryFromWkt(cont_geom)
+    #cont_shape = ogr.CreateGeometryFromWkt(cont_geom)
+    cont_shape = shapely.wkt.loads(cont_geom)
     sp_cont_range_list = []
     for sp in sp_set: 
         if taxon is not 'birds':
-            sp_range = ogr.CreateGeometryFromWkt(ti.sp_reproj(postgis_cur, taxon, sp))
+            #sp_range = ogr.CreateGeometryFromWkt(ti.sp_reproj(postgis_cur, taxon, sp))
+            sp_range = shapely.wkt.loads(ti.sp_reproj(postgis_cur, taxon, sp))
         else: 
             genus, spname = sp.split(' ')
             sp_shp = proj_dir + 'IUCN_range_maps\\BIRDS\\' + genus + '_' + spname + '*.shp'
             sp_dir = glob.glob(sp_shp)[0]
-            sp_geom_list = ti.import_shapefile(in_dir)
+            sp_geom_list = ti.import_shapefile(sp_dir)
             sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
             try:
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
             except: 
                 sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
-            sp_range = ogr.CreateGeometryFromWkt(ti.reproj_geom(sp_geom_wkt))
-        try: sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
-        except:
-            sp_range = sp_range.Buffer(0)
-            sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
+            #sp_range = ogr.CreateGeometryFromWkt(ti.reproj_geom(sp_geom_wkt))
+            sp_range = shapely.wkt.loads(ti.sp_reproj(sp_geom_wkt))
+        
+        # Try shapely instead of ogr
+        sp_cont_range = (sp_shapely.intersection(cont_shapely)).area
+        #try: sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
+        #except:
+            #sp_range = sp_range.Buffer(0)
+            #sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
         sp_cont_range_list.append(sp_cont_range)
     
-    taxon_cont_richness = [len(grid) for grid in sp_list_flat]
+    taxon_cont_richness = [len(grid) for grid in sp_list_flat if len(grid) is not 0] # 07/29/15: Zeros are not included
     sp_order_global = [sp for (area, sp) in sorted(zip(sp_global_range_list, sp_set))]
     sp_order_cont = [sp for (area, sp) in sorted(zip(sp_cont_range_list, sp_set))]
     orders = [sp_order_global, sp_order_global[::-1], sp_order_cont, sp_order_cont[::-1]]
@@ -74,7 +87,7 @@ def corr_richness_taxon_continet(taxon, continent):
     sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
     sp_accumu_quart_global = np.zeros((4, len(sp_list_flat)))
     
-    r2_ind = np.zeros((4, len(sp_set)))
+    r2_ind = np.zeros((4, len(sp_set))) # Note that the arrays are mistakenly names r^2 but they are actually r.
     r2_quart = np.zeros((2, 4))
     
     for j in range(len(sp_set)): # Loop through species
@@ -106,11 +119,73 @@ def corr_richness_taxon_continet(taxon, continent):
     out_ind.close()
     out_quart.close()
 
+def import_ind_rows(taxon, cont, rank, file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\ind_sp_corr.txt'):
+    """Return the r^2 values from ind_sp_corr.txt with given taxon, continent, and ranking method."""
+    with open(file_dir) as f:
+        content = f.read().splitlines()
+    content = [x.split('\t') for x in content]
+    out = []
+    for x in content:
+        if x[0:3] == [taxon, cont, rank]:
+            out.append([float(y) for y in x[4:]])
+    return out
+
+def import_quart_file(taxon, cont, rank, file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\quart_corr.txt'):
+    """Return the r^2 values from quart_corr.txt with given taxon, continent, and ranking method."""
+    with open(file_dir) as f:
+        content = f.read().splitlines()
+    content = [x.split('\t') for x in content]
+    for x in content:
+        if x[0:3] == [taxon, cont, rank]:
+            return [float(y) for y in x[3:]]
+    
+def plot_quartile(list_of_r2, ax):
+    """Plot the r^2 of the 4 quartiles."""
+    plt.ylim(-0.5, 1)
+    ax.plot(range(1, 5), list_of_r2, 'bo-')
+    ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    ax.locator_params(nbins=5)
+    ax.set_xlabel('Quantile', labelpad = 4, size = 8)
+    ax.set_ylabel('r value', labelpad = 4, size = 8)
+    return ax
+
+def plot_ind_accum(list_of_lists_of_r2, ax):
+    """Plot the increase of r^2 with the increase of number of species, from both ends."""
+    plt.ylim(-0.5, 1)
+    ax.plot(range(len(list_of_lists_of_r2[0])), list_of_lists_of_r2[0], color = 'red', linewidth = 2)
+    ax.plot(range(len(list_of_lists_of_r2[1])), list_of_lists_of_r2[1], color = 'blue', linewidth = 2)
+    ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    ax.locator_params(nbins=5)
+    ax.set_xlabel('Number of species', labelpad = 4, size = 8)
+    ax.set_ylabel('r value', labelpad = 4, size = 8)
+    return ax
+    
 if __name__ == '__main__':        
     taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
+    #taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
     # For simplicity, use default continent in shp file
     continent_list = ['Asia', 'North America', 'Europe', 'Africa', 'South America', 
                       'Oceania', 'Australia']
     for taxon in taxon_list:
         for continent in continent_list:
             corr_richness_taxon_continet(taxon, continent)
+            
+    # Plot results
+    ranking_list = ['global', 'continent']
+    out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
+    for ranking in ranking_list:
+        for taxon in taxon_list:
+            fig = plt.figure(figsize = (4, 14))
+            for i, continent in enumerate(continent_list):
+                quartile_r2_list = import_quart_file(taxon, continent, ranking)
+                ind_r2_list = import_ind_rows(taxon, continent, ranking)
+                ax1 = plt.subplot(7, 2, 2 * i + 1)
+                sub = plot_quartile(quartile_r2_list, ax1)
+                plt.title(continent, size = 16)
+                ax2 = plt.subplot(7, 2, 2 * i + 2)
+                sub = plot_ind_accum(ind_r2_list, ax2)
+            plt.subplots_adjust(wspace = 0.4, hspace = 0.55)
+            out_name = out_dir + taxon + '_' + ranking + '.pdf'
+            plt.savefig(out_name, format = 'pdf', dpi = 400)
+            plt.close(fig)
+            

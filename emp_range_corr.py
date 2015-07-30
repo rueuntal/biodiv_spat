@@ -45,16 +45,14 @@ def corr_richness_taxon_continent(taxon, continent):
     cont_array = ti.create_array_for_raster(ti.proj_extent('behrmann'), geom = cont_geom, pixel_size = pixel_size) 
     sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
                     if cont_array[i][j] == 1]
+    sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells
     sp_set = list(set([sp for grid in sp_list_flat for sp in grid]))
-    sp_global_range_list = [sp_global_range[sp] for sp in sp_set]
     
     # Obtain range size on continent
-    #cont_shape = ogr.CreateGeometryFromWkt(cont_geom)
     cont_shape = shapely.wkt.loads(cont_geom)
     sp_cont_range_list = []
     for sp in sp_set: 
         if taxon is not 'birds':
-            #sp_range = ogr.CreateGeometryFromWkt(ti.sp_reproj(postgis_cur, taxon, sp))
             sp_range = shapely.wkt.loads(ti.sp_reproj(postgis_cur, taxon, sp))
         else: 
             genus, spname = sp.split(' ')
@@ -67,47 +65,38 @@ def corr_richness_taxon_continent(taxon, continent):
             except: 
                 sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
-            #sp_range = ogr.CreateGeometryFromWkt(ti.reproj_geom(sp_geom_wkt))
             sp_range = shapely.wkt.loads(ti.sp_reproj(sp_geom_wkt))
         
         # Try shapely instead of ogr
-        sp_cont_range = (sp_shapely.intersection(cont_shapely)).area
-        #try: sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
-        #except:
-            #sp_range = sp_range.Buffer(0)
-            #sp_cont_range = cont_shape.Intersection(sp_range).GetArea()
+        sp_cont_range = (sp_range.intersection(cont_shape)).area
         sp_cont_range_list.append(sp_cont_range)
     
-    taxon_cont_richness = [len(grid) for grid in sp_list_flat if len(grid) is not 0] # 07/29/15: Zeros are not included
-    sp_order_global = [sp for (area, sp) in sorted(zip(sp_global_range_list, sp_set))]
+    taxon_cont_richness = [len(grid) for grid in sp_list_flat] 
     sp_order_cont = [sp for (area, sp) in sorted(zip(sp_cont_range_list, sp_set))]
-    orders = [sp_order_global, sp_order_global[::-1], sp_order_cont, sp_order_cont[::-1]]
+    orders = [sp_order_cont, sp_order_cont[::-1]] # 07/29/15: Only look at continental range distributions
     
-    sp_accumu_ind = np.zeros((4, len(sp_list_flat)))
-    sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
-    sp_accumu_quart_global = np.zeros((4, len(sp_list_flat)))
+    sp_accumu_ind = np.zeros((2, len(sp_list_flat)))
+    sp_accumu_quart_cont = np.zeros((2, len(sp_list_flat)))
+    sp_accumu_quart_global = np.zeros((2, len(sp_list_flat)))
     
-    r2_ind = np.zeros((4, len(sp_set))) # Note that the arrays are mistakenly names r^2 but they are actually r.
-    r2_quart = np.zeros((2, 4))
+    r2_ind = np.zeros((2, len(sp_set))) # Note that the arrays are mistakenly names r^2 but they are actually r.
+    r2_quart = np.zeros((1, 4))
     
     for j in range(len(sp_set)): # Loop through species
-        for i in range(4): # Loop through four different ways to accumulate species
+        for i in range(2): # Loop through four different ways to accumulate species
             sp = orders[i][j]
             sp_dist = np.array([1 if sp in grid else 0 for grid in sp_list_flat])
             sp_accumu_ind[i] += sp_dist
             r2_ind[i][j] = pearsonr(sp_accumu_ind[i], taxon_cont_richness)[0]
-            if i == 0: # If the order is low to high, global
-                sp_accumu_quart_global[np.floor(j / len(sp_set) * 4)] += sp_dist
-            elif i == 2: # If the order is low to high, continent
+            if i == 0: # If the order is low to high, continent
                 sp_accumu_quart_cont[np.floor(j / len(sp_set) * 4)] += sp_dist
     
     for i in range(4):
-        r2_quart[0][i] = pearsonr(sp_accumu_quart_global[i], taxon_cont_richness)[0]
         r2_quart[1][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
         
     # Save output 
-    ind_header = [['global', 'low'], ['global', 'high'], ['continent', 'low'], ['continent', 'high']]
-    quart_header = [['global'], ['continent']]
+    ind_header = [['continent', 'low'], ['continent', 'high']]
+    quart_header = [['continent']]
     out_ind = open(proj_dir + 'emp_range_corr\\ind_sp_corr.txt', 'a')
     out_quart = open(proj_dir + 'emp_range_corr\\quart_corr.txt', 'a')
     for i, r2_ind_row in enumerate(r2_ind):
@@ -162,30 +151,29 @@ def plot_ind_accum(list_of_lists_of_r2, ax):
     
 if __name__ == '__main__':        
     taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
-    #taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
     # For simplicity, use default continent in shp file
     continent_list = ['Asia', 'North America', 'Europe', 'Africa', 'South America', 
                       'Oceania', 'Australia']
     for taxon in taxon_list:
         for continent in continent_list:
-            corr_richness_taxon_continet(taxon, continent)
+            corr_richness_taxon_continent(taxon, continent)
             
     # Plot results
-    ranking_list = ['global', 'continent']
-    out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
-    for ranking in ranking_list:
-        for taxon in taxon_list:
-            fig = plt.figure(figsize = (4, 14))
-            for i, continent in enumerate(continent_list):
-                quartile_r2_list = import_quart_file(taxon, continent, ranking)
-                ind_r2_list = import_ind_rows(taxon, continent, ranking)
-                ax1 = plt.subplot(7, 2, 2 * i + 1)
-                sub = plot_quartile(quartile_r2_list, ax1)
-                plt.title(continent, size = 16)
-                ax2 = plt.subplot(7, 2, 2 * i + 2)
-                sub = plot_ind_accum(ind_r2_list, ax2)
-            plt.subplots_adjust(wspace = 0.4, hspace = 0.55)
-            out_name = out_dir + taxon + '_' + ranking + '.pdf'
-            plt.savefig(out_name, format = 'pdf', dpi = 400)
-            plt.close(fig)
+    #ranking_list = ['continent']
+    #out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
+    #for ranking in ranking_list:
+        #for taxon in taxon_list:
+            #fig = plt.figure(figsize = (4, 14))
+            #for i, continent in enumerate(continent_list):
+                #quartile_r2_list = import_quart_file(taxon, continent, ranking)
+                #ind_r2_list = import_ind_rows(taxon, continent, ranking)
+                #ax1 = plt.subplot(7, 2, 2 * i + 1)
+                #sub = plot_quartile(quartile_r2_list, ax1)
+                #plt.title(continent, size = 16)
+                #ax2 = plt.subplot(7, 2, 2 * i + 2)
+                #sub = plot_ind_accum(ind_r2_list, ax2)
+            #plt.subplots_adjust(wspace = 0.4, hspace = 0.55)
+            #out_name = out_dir + taxon + '_' + ranking + '.pdf'
+            #plt.savefig(out_name, format = 'pdf', dpi = 400)
+            #plt.close(fig)
             

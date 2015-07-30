@@ -76,8 +76,7 @@ def corr_richness_taxon_continent(taxon, continent):
     orders = [sp_order_cont, sp_order_cont[::-1]] # 07/29/15: Only look at continental range distributions
     
     sp_accumu_ind = np.zeros((2, len(sp_list_flat)))
-    sp_accumu_quart_cont = np.zeros((2, len(sp_list_flat)))
-    sp_accumu_quart_global = np.zeros((2, len(sp_list_flat)))
+    sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
     
     r2_ind = np.zeros((2, len(sp_set))) # Note that the arrays are mistakenly names r^2 but they are actually r.
     r2_quart = np.zeros((1, 4))

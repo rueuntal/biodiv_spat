@@ -15,6 +15,7 @@ import numpy as np
 import glob
 import shapely
 from scipy.stats.stats import pearsonr
+import os.path
 
 def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     """Obtain the correlation between overall richness and partial richness (by adding species one by one)
@@ -51,35 +52,39 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     sp_set = list(set([sp for grid in sp_list_flat for sp in grid]))
     
     # Obtain range size on continent and save to disk
-    taxon_cont_range_dic = {}    
-    cont_shape = shapely.wkt.loads(cont_geom)
-    sp_cont_range_list = []
-    for sp in sp_set: 
-        if taxon is not 'birds':
-            sp_range = shapely.wkt.loads(ti.sp_reproj(postgis_cur, taxon, sp))
-        else: 
-            genus, spname = sp.split(' ')
-            sp_shp = proj_dir + 'IUCN_range_maps\\BIRDS\\' + genus + '_' + spname + '*.shp'
-            sp_dir = glob.glob(sp_shp)[0]
-            sp_geom_list = ti.import_shapefile(sp_dir)
-            sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
-            try:
-                sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-            except: 
-                sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
-                sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
-            sp_range = shapely.wkt.loads(ti.reproj_geom(sp_geom_wkt))
-        
-        # Try shapely instead of ogr
-        try: sp_cont_range = (sp_range.intersection(cont_shape)).area
-        except:
-            sp_range = sp_range.buffer(0)
-            sp_cont_range = (sp_range.intersection(cont_shape)).area
-        sp_cont_range_list.append(sp_cont_range)
-        taxon_cont_range_dic[sp] = sp_range.area
-   
-    if sp_filter is 'all':    
-        out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '_range.pkl', 'wb')
+    dic_dir = proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '_range.pkl'
+    if os.path.isfile(dic_dir):  # So that range sizes on continents don't have to be computed over and over again
+        taxon_cont_range_dic = ti.import_pickle_file(dic_dir)
+        sp_cont_range_list = [taxon_cont_range_dic[sp] for sp in sp_set]
+    else:
+        taxon_cont_range_dic = {}    
+        cont_shape = shapely.wkt.loads(cont_geom)
+        sp_cont_range_list = []
+        for sp in sp_set: 
+            if taxon is not 'birds':
+                sp_range = shapely.wkt.loads(ti.sp_reproj(postgis_cur, taxon, sp))
+            else: 
+                genus, spname = sp.split(' ')
+                sp_shp = proj_dir + 'IUCN_range_maps\\BIRDS\\' + genus + '_' + spname + '*.shp'
+                sp_dir = glob.glob(sp_shp)[0]
+                sp_geom_list = ti.import_shapefile(sp_dir)
+                sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
+                try:
+                    sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+                except: 
+                    sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
+                    sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
+                sp_range = shapely.wkt.loads(ti.reproj_geom(sp_geom_wkt))
+            
+            # Try shapely instead of ogr
+            try: sp_cont_range = (sp_range.intersection(cont_shape)).area
+            except:
+                sp_range = sp_range.buffer(0)
+                sp_cont_range = (sp_range.intersection(cont_shape)).area
+            sp_cont_range_list.append(sp_cont_range)
+            taxon_cont_range_dic[sp] = sp_range.area
+       
+        out_file = open(dic_dir, 'wb')
         cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
         out_file.close()
        
@@ -90,7 +95,7 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     orders = [sp_order_cont, sp_order_cont[::-1]] # 07/29/15: Only look at continental range distributions
     
     sp_accumu_ind = np.zeros((2, len(sp_list_flat)))
-    r_ind = np.zeros((2, len(sp_set)))
+    r_ind = np.zeros((2, len(sp_order_cont)))
     
     if sp_filter is 'all': 
         sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))

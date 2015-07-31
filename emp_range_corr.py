@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import toy_iucn as ti
 import psycopg2
 from osgeo import ogr
+import cPickle
 import numpy as np
 import glob
 import shapely
@@ -68,10 +69,6 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
                 sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
             sp_range = shapely.wkt.loads(ti.reproj_geom(sp_geom_wkt))
-        taxon_cont_range_dic[sp] = sp_range.area
-        out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '.pkl', 'wb')
-        cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
-        out_file.close()
         
         # Try shapely instead of ogr
         try: sp_cont_range = (sp_range.intersection(cont_shape)).area
@@ -79,6 +76,11 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
             sp_range = sp_range.buffer(0)
             sp_cont_range = (sp_range.intersection(cont_shape)).area
         sp_cont_range_list.append(sp_cont_range)
+        taxon_cont_range_dic[sp] = sp_range.area
+   
+    out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '_range.pkl', 'wb')
+    cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
+    out_file.close()
    
    # Rank species based on their range sizes on the continent 
     sp_order_cont = [sp for (area, sp) in sorted(zip(sp_cont_range_list, sp_set))]

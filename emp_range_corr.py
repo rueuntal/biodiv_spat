@@ -78,10 +78,11 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
         sp_cont_range_list.append(sp_cont_range)
         taxon_cont_range_dic[sp] = sp_range.area
    
-    out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '_range.pkl', 'wb')
-    cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
-    out_file.close()
-   
+    if sp_filter is 'all':    
+        out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '_range.pkl', 'wb')
+        cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
+        out_file.close()
+       
    # Rank species based on their range sizes on the continent 
     sp_order_cont = [sp for (area, sp) in sorted(zip(sp_cont_range_list, sp_set))]
     if sp_filter is not 'all': sp_order_cont = sp_order_cont[:int(np.floor(len(sp_order_cont) * 0.75))]

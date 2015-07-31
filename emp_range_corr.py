@@ -49,7 +49,8 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells with no species from the given taxon.
     sp_set = list(set([sp for grid in sp_list_flat for sp in grid]))
     
-    # Obtain range size on continent
+    # Obtain range size on continent and save to disk
+    taxon_cont_range_dic = {}    
     cont_shape = shapely.wkt.loads(cont_geom)
     sp_cont_range_list = []
     for sp in sp_set: 
@@ -67,6 +68,10 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
                 sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
                 sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))            
             sp_range = shapely.wkt.loads(ti.reproj_geom(sp_geom_wkt))
+        taxon_cont_range_dic[sp] = sp_range.area
+        out_file = open(proj_dir + 'emp_range_corr\\' + taxon + '_' + continent + '.pkl', 'wb')
+        cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
+        out_file.close()
         
         # Try shapely instead of ogr
         try: sp_cont_range = (sp_range.intersection(cont_shape)).area
@@ -86,22 +91,22 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
     
     if sp_filter is 'all': 
         sp_accumu_quart_cont = np.zeros((4, len(sp_list_flat)))
-        r2_quart = np.zeros((1, 4))
+        r_quart = np.zeros((1, 4))
     else: 
         sp_accumu_quart_cont = np.zeros((3, len(sp_list_flat)))
-        r2_quart = np.zeros((1, 3))        
+        r_quart = np.zeros((1, 3))        
     
     for j in range(len(sp_order_cont)): # Loop through species
         for i in range(2): # Loop through two ways to accumulate species - from the lower end, or from the higher end
             sp = orders[i][j]
             sp_dist = np.array([1 if sp in grid else 0 for grid in sp_list_flat])
             sp_accumu_ind[i] += sp_dist
-            r2_ind[i][j] = pearsonr(sp_accumu_ind[i], taxon_cont_richness)[0]
+            r_ind[i][j] = pearsonr(sp_accumu_ind[i], taxon_cont_richness)[0]
             if i == 0: # If the order is low to high, continent
                 sp_accumu_quart_cont[np.floor(j / len(sp_set) * 4)] += sp_dist
     
     for i in range(len(sp_accumu_quart_cont)):
-        r2_quart[0][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
+        r_quart[0][i] = pearsonr(sp_accumu_quart_cont[i], taxon_cont_richness)[0]
         
     # Save output 
     ind_header = [['continent', 'low'], ['continent', 'high']]
@@ -112,11 +117,11 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
         out_ind = open(proj_dir + 'emp_range_corr\\ind_sp_corr_lower.txt', 'a')
         out_quart = open(proj_dir + 'emp_range_corr\\quart_corr_lower.txt', 'a')
         
-    for i, r2_ind_row in enumerate(r2_ind):
-        out_row = [taxon, continent] + ind_header[i] + list(r2_ind_row)
+    for i, r_ind_row in enumerate(r_ind):
+        out_row = [taxon, continent] + ind_header[i] + list(r_ind_row)
         print>>out_ind, '\t'.join(map(str, out_row))
-    for j, r2_quart_row in enumerate(r2_quart):
-        out_row_quart = [taxon, continent] + 'continent' + list(r2_quart_row)
+    for j, r_quart_row in enumerate(r_quart):
+        out_row_quart = [taxon, continent] + ['continent'] + list(r_quart_row)
         print>>out_quart, '\t'.join(map(str, out_row_quart))
     out_ind.close()
     out_quart.close()
@@ -141,21 +146,21 @@ def import_quart_file(taxon, cont, rank, file_dir = 'C:\\Users\\Xiao\\Dropbox\\p
         if x[0:3] == [taxon, cont, rank]:
             return [float(y) for y in x[3:]]
     
-def plot_quartile(list_of_r2, ax):
+def plot_quartile(list_of_r, ax):
     """Plot the r^2 of the 4 quartiles."""
     plt.ylim(-0.5, 1)
-    ax.plot(range(1, 5), list_of_r2, 'bo-')
+    ax.plot(range(1, 5), list_of_r, 'bo-')
     ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
     ax.locator_params(nbins=5)
     ax.set_xlabel('Quantile', labelpad = 4, size = 8)
     ax.set_ylabel('r value', labelpad = 4, size = 8)
     return ax
 
-def plot_ind_accum(list_of_lists_of_r2, ax):
+def plot_ind_accum(list_of_lists_of_r, ax):
     """Plot the increase of r^2 with the increase of number of species, from both ends."""
     plt.ylim(-0.5, 1)
-    ax.plot(range(len(list_of_lists_of_r2[0])), list_of_lists_of_r2[0], color = 'red', linewidth = 2)
-    ax.plot(range(len(list_of_lists_of_r2[1])), list_of_lists_of_r2[1], color = 'blue', linewidth = 2)
+    ax.plot(range(len(list_of_lists_of_r[0])), list_of_lists_of_r[0], color = 'red', linewidth = 2)
+    ax.plot(range(len(list_of_lists_of_r[1])), list_of_lists_of_r[1], color = 'blue', linewidth = 2)
     ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
     ax.locator_params(nbins=5)
     ax.set_xlabel('Number of species', labelpad = 4, size = 8)

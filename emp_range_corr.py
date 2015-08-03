@@ -6,7 +6,7 @@ sys.path.append('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox')
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+import matplotlib.lines as mlines
 import toy_iucn as ti
 import psycopg2
 from osgeo import ogr
@@ -164,11 +164,43 @@ def plot_quartile(list_of_r, ax):
     ax.set_ylabel('r value', labelpad = 4, size = 8)
     return ax
 
+def plot_quartile_comp(list_of_r_4, list_of_r_3, ax):
+    """Compare the r-value obtained for quantiles when all species are included, 
+    
+    or when the species with the largest ranges are excluded.
+    
+    """
+    plt.ylim(-0.5, 1.5)
+    ax.plot(range(1, 5), list_of_r_4, 'bo-')
+    ax.plot(range(1, 4), list_of_r_3, 'ro-')
+    ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    ax.locator_params(nbins=5)
+    ax.set_xlabel('Quantile', labelpad = 4, size = 8)
+    ax.set_ylabel('r value', labelpad = 4, size = 8)
+    return ax
+
 def plot_ind_accum(list_of_lists_of_r, ax):
     """Plot the increase of r^2 with the increase of number of species, from both ends."""
     plt.ylim(-0.5, 1)
     ax.plot(range(len(list_of_lists_of_r[0])), list_of_lists_of_r[0], color = 'red', linewidth = 2)
     ax.plot(range(len(list_of_lists_of_r[1])), list_of_lists_of_r[1], color = 'blue', linewidth = 2)
+    ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    ax.locator_params(nbins=5)
+    ax.set_xlabel('Number of species', labelpad = 4, size = 8)
+    ax.set_ylabel('r value', labelpad = 4, size = 8)
+    return ax
+ 
+def plot_ind_accum_comp(list_of_lists_of_r_4, list_of_lists_of_r_3, ax):
+    """Compare the increase of r^2 with the increase of number of species, from both ends, 
+    
+    when the most broad-ranged species are included versus excluded.
+    
+    """
+    plt.ylim(-0.5, 1.5)
+    ax.plot(range(len(list_of_lists_of_r_4[0])), list_of_lists_of_r_4[0], color = 'blue', linewidth = 2)
+    ax.plot(range(len(list_of_lists_of_r_4[1])), list_of_lists_of_r_4[1], color = 'blue', linewidth = 2, linestyle = '--')
+    ax.plot(range(len(list_of_lists_of_r_3[0])), list_of_lists_of_r_3[0], color = 'red', linewidth = 2)
+    ax.plot(range(len(list_of_lists_of_r_3[1])), list_of_lists_of_r_3[1], color = 'red', linewidth = 2, linestyle = '--')    
     ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
     ax.locator_params(nbins=5)
     ax.set_xlabel('Number of species', labelpad = 4, size = 8)
@@ -183,10 +215,41 @@ if __name__ == '__main__':
         for continent in continent_list:
             corr_richness_taxon_continent(taxon, continent)
             corr_richness_taxon_continent(taxon, continent, sp_filter = 'lower')
+   
+    # Plot comparison
+    out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
+    ranking = 'continent'
+    for taxon in taxon_list:
+        fig = plt.figure(figsize = (4, 10))
+        for i, continent in enumerate(continent_list):
+            quartile_r2_list_r4 = import_quart_file(taxon, continent, ranking)
+            quartile_r2_list_r3 = import_quart_file(taxon, continent, ranking, 
+                                                    file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\quart_corr_lower.txt')
+            ind_r2_list_r4 = import_ind_rows(taxon, continent, ranking)
+            ind_r2_list_r3 = import_ind_rows(taxon, continent, ranking, 
+                                             file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\ind_sp_corr_lower.txt')
+            ax1 = plt.subplot(7, 2, 2 * i + 1)
+            sub = plot_quartile_comp(quartile_r2_list_r4, quartile_r2_list_r3, ax1)
+            plt.title(continent, size = 16)
+            ax2 = plt.subplot(7, 2, 2 * i + 2)
+            sub = plot_ind_accum_comp(ind_r2_list_r4, ind_r2_list_r3, ax2)
+            if i == 0:
+                r4_label = mlines.Line2D([], [], color = 'blue', linestyle = '-', linewidth = 2, marker = 'o', 
+                                     label = 'All species')
+                r3_label = mlines.Line2D([], [], color = 'red', linestyle = '-', linewidth = 2, marker = 'o', 
+                                                     label = '3/4 species')                                
+                ax1.legend(loc = 'top right', handles = [r4_label, r3_label], prop={'size':6})
+                high_label = mlines.Line2D([], [], color = 'black', linestyle = '-', linewidth = 2, label = 'From high')
+                low_label = mlines.Line2D([], [], color = 'black', linestyle = '--', linewidth = 2, label = 'From low')
+                ax2.legend(loc = 'top right', handles = [high_label, low_label], prop={'size':6})
+                
+        plt.subplots_adjust(top = 0.95, bottom = 0,  right = 0.5, wspace = 0.4, hspace = 0.65)       
+        out_name = out_dir + taxon + '_' + ranking + '_comp.pdf'
+        plt.savefig(out_name, format = 'pdf', dpi = 400)
+        plt.close(fig)            
             
     # Plot results
-    #ranking_list = ['continent']
-    #out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
+    #ranking_list = ['continent'] 
     #for ranking in ranking_list:
         #for taxon in taxon_list:
             #fig = plt.figure(figsize = (4, 14))

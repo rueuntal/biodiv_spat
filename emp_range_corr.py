@@ -84,7 +84,7 @@ def corr_richness_taxon_continent(taxon, continent, sp_filter = 'all'):
                 sp_range = sp_range.buffer(0)
                 sp_cont_range = (sp_range.intersection(cont_shape)).area
             sp_cont_range_list.append(sp_cont_range)
-            taxon_cont_range_dic[sp] = sp_range.area
+            taxon_cont_range_dic[sp] = sp_cont_range
        
         out_file = open(dic_dir, 'wb')
         cPickle.dump(taxon_cont_range_dic, out_file, protocol = 2)
@@ -188,12 +188,12 @@ def sim_taxon_continent_landscape(taxon, continent, continuous = False):
     for i in range(S):
         richness_from_low += sp_range_array_list[i]
         r_low_4.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape))[0])
-        r_low_3.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape_3))[0])
         richness_from_high_4 += sp_range_array_list[S - i - 1]
         r_high_4.append(pearsonr(np.ravel(richness_from_high_4), np.ravel(richness_landscape))[0])
         if i <= int(np.floor(len(sp_range_list) * 3/4)):
             richness_from_high_3 += sp_range_array_list[int(np.floor(len(sp_range_list) * 3/4)) - i]
             r_high_3.append(pearsonr(np.ravel(richness_from_high_3), np.ravel(richness_landscape_3))[0])
+            r_low_3.append(pearsonr(np.ravel(richness_from_low), np.ravel(richness_landscape_3))[0])
         if i < S * 0.25: richness_quar1 += sp_range_array_list[i]
         elif i < S * 0.5: richness_quar2 += sp_range_array_list[i]
         elif i < S * 0.75: richness_quar3 += sp_range_array_list[i]
@@ -304,46 +304,46 @@ if __name__ == '__main__':
             corr_richness_taxon_continent(taxon, continent)
             corr_richness_taxon_continent(taxon, continent, sp_filter = 'lower')
    
-    # Run simulations to set the expected bounds for empirical results
-    out_dir_sim = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\sim'
-    for taxon in taxon_list:
-        for continent in continent_list:
-            out_name_scatter = taxon + '_' + continent + '_scattered'
-            sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_scatter)
-            out_name_continuous = taxon + '_' + continent + '_continuous'
-            sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_continuous, continuous = True)
+    ## Run simulations to set the expected bounds for empirical results
+    #out_dir_sim = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\sim'
+    #for taxon in taxon_list:
+        #for continent in continent_list:
+            #out_name_scatter = taxon + '_' + continent + '_scattered'
+            #sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_scatter)
+            #out_name_continuous = taxon + '_' + continent + '_continuous'
+            #sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_continuous, continuous = True)
             
-    # Plot comparison
-    out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
-    ranking = 'continent'
-    for taxon in taxon_list:
-        fig = plt.figure(figsize = (4, 10))
-        for i, continent in enumerate(continent_list):
-            quartile_r2_list_r4 = import_quart_file(taxon, continent, ranking)
-            quartile_r2_list_r3 = import_quart_file(taxon, continent, ranking, 
-                                                    file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\quart_corr_lower.txt')
-            ind_r2_list_r4 = import_ind_rows(taxon, continent, ranking)
-            ind_r2_list_r3 = import_ind_rows(taxon, continent, ranking, 
-                                             file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\ind_sp_corr_lower.txt')
-            ax1 = plt.subplot(7, 2, 2 * i + 1)
-            sub = plot_quartile_comp(quartile_r2_list_r4, quartile_r2_list_r3, ax1)
-            plt.title(continent, size = 16)
-            ax2 = plt.subplot(7, 2, 2 * i + 2)
-            sub = plot_ind_accum_comp(ind_r2_list_r4, ind_r2_list_r3, ax2)
-            if i == 0:
-                r4_label = mlines.Line2D([], [], color = 'blue', linestyle = '-', linewidth = 1, marker = 'o', 
-                                     label = 'All species')
-                r3_label = mlines.Line2D([], [], color = 'red', linestyle = '-', linewidth = 1, marker = 'o', 
-                                                     label = '3/4 species')                                
-                ax1.legend(loc = 'lower right', handles = [r4_label, r3_label], prop={'size':6})
-                high_label = mlines.Line2D([], [], color = 'black', linestyle = '-', linewidth = 0.5, label = 'From high')
-                low_label = mlines.Line2D([], [], color = 'black', linestyle = '--', linewidth = 0.5, label = 'From low')
-                ax2.legend(loc = 'lower right', handles = [high_label, low_label], prop={'size':6}, handlelength=3)
+    ## Plot comparison
+    #out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'
+    #ranking = 'continent'
+    #for taxon in taxon_list:
+        #fig = plt.figure(figsize = (4, 10))
+        #for i, continent in enumerate(continent_list):
+            #quartile_r2_list_r4 = import_quart_file(taxon, continent, ranking)
+            #quartile_r2_list_r3 = import_quart_file(taxon, continent, ranking, 
+                                                    #file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\quart_corr_lower.txt')
+            #ind_r2_list_r4 = import_ind_rows(taxon, continent, ranking)
+            #ind_r2_list_r3 = import_ind_rows(taxon, continent, ranking, 
+                                             #file_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\ind_sp_corr_lower.txt')
+            #ax1 = plt.subplot(7, 2, 2 * i + 1)
+            #sub = plot_quartile_comp(quartile_r2_list_r4, quartile_r2_list_r3, ax1)
+            #plt.title(continent, size = 16)
+            #ax2 = plt.subplot(7, 2, 2 * i + 2)
+            #sub = plot_ind_accum_comp(ind_r2_list_r4, ind_r2_list_r3, ax2)
+            #if i == 0:
+                #r4_label = mlines.Line2D([], [], color = 'blue', linestyle = '-', linewidth = 1, marker = 'o', 
+                                     #label = 'All species')
+                #r3_label = mlines.Line2D([], [], color = 'red', linestyle = '-', linewidth = 1, marker = 'o', 
+                                                     #label = '3/4 species')                                
+                #ax1.legend(loc = 'lower right', handles = [r4_label, r3_label], prop={'size':6})
+                #high_label = mlines.Line2D([], [], color = 'black', linestyle = '-', linewidth = 0.5, label = 'From high')
+                #low_label = mlines.Line2D([], [], color = 'black', linestyle = '--', linewidth = 0.5, label = 'From low')
+                #ax2.legend(loc = 'lower right', handles = [high_label, low_label], prop={'size':6}, handlelength=3)
                 
-        plt.subplots_adjust(top = 0.95, bottom = -0.3,  wspace = 0.4, hspace = 0.65)       
-        out_name = out_dir + taxon + '_' + ranking + '_comp.pdf'
-        plt.savefig(out_name, format = 'pdf', dpi = 400)
-        plt.close(fig)            
+        #plt.subplots_adjust(top = 0.95, bottom = -0.3,  wspace = 0.4, hspace = 0.65)       
+        #out_name = out_dir + taxon + '_' + ranking + '_comp.pdf'
+        #plt.savefig(out_name, format = 'pdf', dpi = 400)
+        #plt.close(fig)            
             
     # Plot results
     #ranking_list = ['continent'] 

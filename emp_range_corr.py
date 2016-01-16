@@ -241,7 +241,31 @@ def import_quart_file(taxon, cont, rank, file_dir = 'C:\\Users\\Xiao\\Dropbox\\p
     for x in content:
         if x[0:3] == [taxon, cont, rank]:
             return [float(y) for y in x[3:]]
+
+def import_quart_file_sim(taxon, cont, range_type, lower = False, \
+                          file_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\sim\\'):
+    """Read in the output of r^2 for the 4 quartiles obtained from simulations. 
     
+    The output is a structured data frame with 3 (when the original file contained only the lower three quartiles) or 4 columns
+    and as many rows as the number of simulated samples.
+    
+    Inputs:
+    taxon, cont - taxon and continent of interest
+    range_type - whether the ranges are simulated as 'continuous', or 'scattered'
+    lower - whether the file contains all species, or only species from the lower three quartiles
+    
+    """
+    file_name = taxon + '_' + cont + '_' + range_type + '_quartile'
+    if lower: file_name += '_lower'
+    with open(file_folder + file_name + '.txt') as f:
+        content = f.read().splitlines()
+    content = [x.split('\t') for x in content]
+    if lower: datatype = 'f8, f8, f8'
+    else: datatype = 'f8, f8, f8, f8'
+    out = np.zeros(len(content), dtype = datatype)
+    for i, irow in enumerate(content): out[i] = tuple(np.array(irow))
+    return out
+
 def plot_quartile(list_of_r, ax):
     """Plot the r^2 of the 4 quartiles."""
     plt.ylim(-0.5, 1)
@@ -294,24 +318,57 @@ def plot_ind_accum_comp(list_of_lists_of_r_4, list_of_lists_of_r_3, ax):
     ax.set_xlabel('Number of species', labelpad = 4, size = 8)
     ax.set_ylabel('r value', labelpad = 4, size = 8)
     return ax
+
+
+def plot_quartile_comp_emp_sim(taxon, continent, \
+                               out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\figures'):
+    """Plot the r2 between overall and partial richness for each quartile, comparing empirical results with simulated results.
     
+    Assumes that the simulated results are in the subfolder "sim" under in_dir.
+    Output: a figure file with name taxon_continent_sim_quartile_plot.png.
+    
+    """
+    quartile_r2_list_emp = import_quart_file(taxon, continent, 'continent') # a list of 4 r^2 values
+    fig = plt.figure(figsize = (8, 4))
+    range_type_list = ['scattered', 'continuous']
+    for iplot in range(len(range_type_list)):
+        range_type = range_type_list[iplot]
+        quartile_r2_list_sim = import_quart_file_sim(taxon, continent, range_type)
+        lower_bound = [np.percentile(quartile_r2_list_sim[quartile_r2_list_sim.dtype.names[i]], 0.025) for i in range(4)]
+        upper_bound = [np.percentile(quartile_r2_list_sim[quartile_r2_list_sim.dtype.names[i]], 0.975) for i in range(4)]
+        ax = plt.subplot(1, 2, iplot)
+        plt.plot(range(1, 5), quartile_r2_list_emp, 'bo-')
+        plt.fill_between(range(1, 5), lower_bound, upper_bound, color = 'grey', alpha = '0.5')
+        plt.plot(range(1, 5), quartile_r2_list_emp, 'bo-') # make sure that the plot is not masked
+        ax.set_title(range_type + ' range')
+        ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+        ax.set_xlabel('Quartile', labelpad = 4, size = 8)
+        ax.set_ylabel('r value', labelpad = 4, size = 8)
+        plt.ylim(0.9 * min(lower_bound + quartile_r2_list_emp), 1.1 * max(upper_bound + quartile_r2_list_emp))
+        
+    plt.tight_layout()
+    plt.savefig(out_dir + '\\' + taxon + '_' + continent + '_quartile_emp_sim_white.png', dpi = 700)
+        
 if __name__ == '__main__':        
-    taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
+    #taxon_list = ['amphibians', 'reptiles', 'birds', 'terrestrial_mammals']
+    taxon_list = ['amphibians', 'terrestrial_mammals', 'birds']
     # For simplicity, use default continent in shp file
     continent_list = ['Asia', 'North America', 'Europe', 'Africa', 'South America']
-    for taxon in taxon_list:
-        for continent in continent_list:
-            corr_richness_taxon_continent(taxon, continent)
-            corr_richness_taxon_continent(taxon, continent, sp_filter = 'lower')
-   
-    ## Run simulations to set the expected bounds for empirical results
-    #out_dir_sim = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\sim'
     #for taxon in taxon_list:
         #for continent in continent_list:
-            #out_name_scatter = taxon + '_' + continent + '_scattered'
-            #sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_scatter)
-            #out_name_continuous = taxon + '_' + continent + '_continuous'
-            #sim_range_size_landscape_Niter(taxon, continent, 1000, out_dir_sim, out_name_continuous, continuous = True)
+            #corr_richness_taxon_continent(taxon, continent)
+            #corr_richness_taxon_continent(taxon, continent, sp_filter = 'lower')
+   
+    # Run simulations to set the expected bounds for empirical results
+    out_dir_sim = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\emp_range_corr\\sim'
+    for taxon in taxon_list:
+        for continent in continent_list:
+            out_name_scatter = taxon + '_' + continent + '_scattered'
+            if not os.path.isfile(out_dir_sim + '\\' + out_name_scatter + '_low.txt'):
+                sim_range_size_landscape_Niter(taxon, continent, 200, out_dir_sim, out_name_scatter)
+            out_name_continuous = taxon + '_' + continent + '_continuous'
+            if not os.path.isfile(out_dir_sim + '\\' + out_name_continuous + '_low.txt'):
+                sim_range_size_landscape_Niter(taxon, continent, 200, out_dir_sim, out_name_continuous, continuous = True)
             
     ## Plot comparison
     #out_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\results\\emp_r\\'

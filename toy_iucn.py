@@ -32,20 +32,45 @@ def import_shapefile(in_dir, Attr = None, AttrFilter = None):
         geom_list.append(feature.GetGeometryRef().ExportToWkt())
     return geom_list
 
-def range_dic_to_csv(in_dir, out_dir, marine_list = []):
+def range_dic_to_csv(in_dir, out_dir, remove_list = []):
     """Read in a dictionary of range sizes for a taxon and convert it to csv for processing in R."""
     range_dic = import_pickle_file(in_dir)
     out_write = open(out_dir, 'wb')
     out = csv.writer(out_write)
     
     for sp in range_dic.keys():
-        if sp not in marine_list:
+        if sp not in remove_list:
             results = np.zeros((1, ), dtype = ('S25, f15'))
             results['f0'] = sp
             results['f1'] = range_dic[sp]
             out.writerows(results)
     out_write.close()
+
+def prob_of_presence(focal_sp, dic_of_sp_range, S, Niter = 10000):
+    """Using weighted random sampling without replacement to compute the probability of 
     
+    presence of a given species in a grid cell with local richness S. 
+    Note that no analytical solution exists for this problem. 
+    Inputs: 
+    focal_sp: species of interest, has to be in dic_of_sp_range
+    dic_of_sp_range: a dictionary of range sizes for species of interest. Range sizes are in unit of number of grid cells.
+    Niter: number of repeated samples to compute probability.
+    
+    Output: 
+    Probability of presence, a single float number.
+    
+    """
+    sp_list, range_list = [], []
+    for sp in dic_of_sp_range:
+        sp_list.append(sp)
+        range_list.append(dic_of_sp_range[sp])
+    p = np.array(range_list) / np.sum(range_list)
+    counter = 0
+    for i in range(Niter):
+        sample = np.random.choice(sp_list, size = S, replace = False, p = p)
+        if focal_sp in sample: counter += 1
+    return counter / Niter
+
 def write_raster_to_file(out_dir, wide, high, geotrans, proj_wkt, nodata = 0, dtype = gdal.GDT_Float32):    
     """Create an empty raster at a specified path (in memory if path is None), define geotransform, projection, nodata etc. 
     
@@ -672,4 +697,35 @@ def get_unique_raster(bio_dir, num_axes, radius, match_dir, out_dir, \
     
     # Save to raster
     convert_array_to_raster(out_array, [xmin, ymax], out_dir, pixel_size, no_value = no_value)
+    return None
+
+def weighted_richness_to_raster(array_sp_list, range_dic, q, out_dir, out_name, pixel_size = 100000, remove_sp_list = []):
+    """Obtains the raw or weighted richness, given an array with species list in each cell, 
+    
+    a dictionary with species range sizes, and weight (q). 
+    
+    The weighing function takes the form S(q) = S_tot**q * sum((range_i / range_tot) ** q)
+    So S(q = 0) is the raw richness, while S(q = -1) is where each species is inversely weighted by their range, 
+    i.e., all species get the same total count across the landscape.
+    The scaling factor, S_tot**q, ensures that when all species are present in a cell, and when they all have the 
+    same range size, S(q) = S_tot regardless of q. 
+    
+    The output is saved to disc as a raster in Behrmann projection.
+    """
+    weighted_S_array = np.zeros(shape = array_sp_list.shape)
+    S_list = []
+    for col in array_sp_list:
+        for row in col:
+            S_list.extend(row)
+    S_list_unique = [sp for sp in set(S_list) if sp not in remove_sp_list]
+    S_tot = len(S_list_unique)
+    range_tot = np.sum([range_dic[x] for x in S_list_unique])
+    for i, col in enumerate(array_sp_list):
+        for j, row in enumerate(col):
+            sp_row = [sp for sp in row if sp not in remove_sp_list]
+            weighted_S_array[i][j] = S_tot ** q * np.sum([(range_dic[x]/range_tot) ** q  for x in sp_row])
+    
+    xmin, xmax, ymin, ymax = proj_extent('behrmann')
+    out_file = out_dir + '/' + out_name + '_weighted_richness_' + str(pixel_size) + '_' + str(-q) + '.tif'
+    convert_array_to_raster(weighted_S_array, [xmin, ymax], out_file, pixel_size)
     return None

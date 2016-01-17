@@ -208,12 +208,12 @@ def sp_reproj(postgis_cur, table_name, sp):
     wkt_reproj = reproj_geom(sp_geom_wkt)
     return wkt_reproj
 
-def sp_reproj_birds(folder, file_name):
+def sp_reproj_birds(folder, file_name, Attr = None, Attr_filter = None):
     """sp_reproj() for birds. This function returns two strings - species binomial, and its reprojected range."""
     in_dir = folder + '/' + file_name
     file_split = file_name.split('_')
     sp_name = file_split[0] + ' ' + file_split[1]
-    sp_geom_list = import_shapefile(in_dir)
+    sp_geom_list = import_shapefile(in_dir, Attr = Attr, AttrFilter = Attr_filter)
     sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
     try:
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
@@ -360,7 +360,7 @@ def create_array_sp_list(postgis_cur, table_name, out_file_name, pixel_size = 10
     out_file.close()
     return None
 
-def create_array_sp_list_birds(folder, out_file_name, pixel_size = 100000):
+def create_array_sp_list_birds(folder, out_file_name, Attr = None, Attr_filter = None, pixel_size = 100000):
     """create_array_sp_list() for birds."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
     
@@ -371,7 +371,7 @@ def create_array_sp_list_birds(folder, out_file_name, pixel_size = 100000):
     file_list = os.listdir(folder)
     for file in file_list:
         if file.endswith('.shp'):
-            sp, wkt_reproj = sp_reproj_birds(folder, file)
+            sp, wkt_reproj = sp_reproj_birds(folder, file, Attr = Attr, Attr_filter = Attr_filter)
             # Convert species range to raster array
             sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
             array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])

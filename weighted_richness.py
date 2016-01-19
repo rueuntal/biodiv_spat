@@ -26,7 +26,11 @@ if __name__ == '__main__':
     birds_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\IUCN_range_maps\\BIRDS\\'
     spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_' + str(pixel_size) + '.pkl', pixel_size = pixel_size)
     spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_range_size.pkl')    
-
+    
+    # A separate map of birds with only resident species
+    spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_resident_' + str(pixel_size) + '.pkl',
+                                    Attr = "SEASONAL", Attr_filter = "1", pixel_size = pixel_size)
+    
     # 2. Compute the weighted richness
     out_folder_weightedS = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\weighted_S\\'
     for taxon in taxa:
@@ -50,7 +54,7 @@ if __name__ == '__main__':
     
     # Altitudinal range is also obtained from WorldClim but requires additional processing in R
     in_folder_alt = in_folder_env + 'alt_30s_bil\\'
-    spat.reproj_raster_pixel_size(in_folder_alt + 'alt.bil', out_folder_env + 'alt_behrman_1000.tif', pixel_size= 1000) 
+    spat.reproj_raster_pixel_size(in_folder_alt + 'alt.bil', out_folder_env + 'alt_behrmann_1000.tif', pixel_size= 1000) 
     # Get min and max in each pixel using R
     r_cmd = "C:\\Program Files\\R\\R-3.1.0\\bin\\x64\\Rscript.exe"
     r_script = "C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\get_alt_min_max.R"
@@ -78,6 +82,9 @@ if __name__ == '__main__':
     spat.convert_array_to_raster(AET_array, (xmin, ymax), out_folder_env + 'AET_raw.tif', pixel_size, 
                                  out_proj = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
     # Convert to Behrmann
-    spat.reproj_raster_to_match(out_file_AET, out_folder_env + 'AET.tif', match_file)
+    spat.reproj_raster_to_match(out_folder_env + 'AET_raw.tif', out_folder_env + 'AET.tif', match_file)
     
+    # 4. Simple regression of weighted richness versus predictors
+    # Predictors are divided into three groups: temperature (mean annual T & PET), productivity (AET & NDVI),
+    # and Janzen's hypothesis (seasonsality, altitudinal range, and interaction)
     

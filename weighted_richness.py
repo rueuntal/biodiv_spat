@@ -84,6 +84,10 @@ if __name__ == '__main__':
     # Convert to Behrmann
     spat.reproj_raster_to_match(out_folder_env + 'AET_raw.tif', out_folder_env + 'AET.tif', match_file)
     
+    # NDVI is obtained from FAO: http://www.fao.org/geonetwork/srv/en/metadata.show?id=37058
+    file_NDVI = in_folder_env + 'Global annual sum NDVI Fig S5a\\Fig S5a.img'
+    spat.reproj_raster_to_match(file_NDVI, out_folder_env + 'NDVI.tif', match_file)
+    
     # 4. Simple regression of weighted richness versus predictors
     # Predictors are divided into three groups: temperature (mean annual T & PET), productivity (AET & NDVI),
     # and Janzen's hypothesis (seasonsality, altitudinal range, and interaction)

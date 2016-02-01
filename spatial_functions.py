@@ -325,15 +325,16 @@ def create_sp_range_dic(postgis_cur, table_name, out_file_name):
     out_file.close()
     return None        
 
-def create_sp_range_dic_bird(folder, out_file_name):
+def create_sp_range_dic_bird(folder, out_file_name, Attr = None, Attr_filter = None):
     """create_sp_range_dic() for birds, where there is one shapefile per species instead of one shapefile for all species combined."""
     sp_range_dic = {}
     for file in os.listdir(folder):
         if file.endswith('.shp'):
-            sp_name, wkt_reproj = sp_reproj_birds(folder, file)
-            if sp_name in sp_range_dic: print "Warning: " + sp_name + " has duplicates."
-            sp_range_shape = shapely.wkt.loads(wkt_reproj)
-            sp_range_dic[sp_name] = sp_range_shape.area
+            sp_name, wkt_reproj = sp_reproj_birds(folder, file, Attr = Attr, Attr_filter = Attr_filter)
+            if wkt_reproj is not None:
+                if sp_name in sp_range_dic: print "Warning: " + sp_name + " has duplicates."
+                sp_range_shape = shapely.wkt.loads(wkt_reproj)
+                sp_range_dic[sp_name] = sp_range_shape.area
     
     out_file = open(out_file_name, 'wb')
     cPickle.dump(sp_range_dic, out_file, protocol = 2)

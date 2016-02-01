@@ -27,12 +27,15 @@ if __name__ == '__main__':
     spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_' + str(pixel_size) + '.pkl', pixel_size = pixel_size)
     spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_range_size.pkl')    
     
-    # A separate map of birds with only resident species
+    # A separate map of birds with only resident species, & dictionary with species ranges for resident species
     spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_resident_' + str(pixel_size) + '.pkl',
                                     Attr = "SEASONAL", Attr_filter = "1", pixel_size = pixel_size)
+    spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_resident_range_size.pkl', Attr = "SEASONAL", 
+                                  Attr_filter = "1")
     
     # 2. Compute the weighted richness
     out_folder_weightedS = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\weighted_S\\'
+    taxa.extend('birds_resident')  # Now only looking at resident birds; TO BE MODIFIED LATER
     for taxon in taxa:
         array_taxon = spat.import_pickle_file(out_folder_sp_dist + taxon + '_' + str(pixel_size) + '.pkl')
         range_dic_taxon = spat.import_pickle_file(out_folder_sp_dist + taxon + '_range_size.pkl')

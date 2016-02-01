@@ -11,6 +11,7 @@ from matplotlib.mlab import PCA
 import re
 from math import sin, cos, sqrt, atan2
 import csv
+import statsmodels.api as sm
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -214,14 +215,16 @@ def sp_reproj_birds(folder, file_name, Attr = None, Attr_filter = None):
     file_split = file_name.split('_')
     sp_name = file_split[0] + ' ' + file_split[1]
     sp_geom_list = import_shapefile(in_dir, Attr = Attr, AttrFilter = Attr_filter)
-    sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
-    try:
-        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    except: 
-        sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
-        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    wkt_reproj = reproj_geom(sp_geom_wkt) 
-    return sp_name, wkt_reproj
+    if len(sp_geom_list) > 0: # If Attribute exists
+        sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
+        try:
+            sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+        except: 
+            sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
+            sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
+        wkt_reproj = reproj_geom(sp_geom_wkt) 
+        return sp_name, wkt_reproj
+    else: return sp_name, None
 
 def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
     """Convert an IUCN shapefile with range maps of a taxon into a raster file of richness, with a given list of species removed."""

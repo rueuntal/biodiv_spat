@@ -8,6 +8,8 @@ import psycopg2
 from osgeo import gdal
 import numpy as np
 import subprocess
+from rpy2.robjects.packages import SignatureTranslatedAnonymousPackage
+STAP = SignatureTranslatedAnonymousPackage
 
 if __name__ == '__main__':
     # 1. Map species ranges onto 100km*100km grid cells, and obtain dictionaries of range sizes
@@ -35,12 +37,17 @@ if __name__ == '__main__':
     
     # 2. Compute the weighted richness
     out_folder_weightedS = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\weighted_S\\'
-    taxa.extend('birds_resident')  # Now only looking at resident birds; TO BE MODIFIED LATER
+    taxa.extend(['birds_resident'])  # Now only looking at resident birds; TO BE MODIFIED LATER
+    seabirds_list = np.genfromtxt('C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\seabirds.csv', dtype = None, \
+                                   delimiter = ',', skip_header = 1, names = ['common name', 'binomial'])    
     for taxon in taxa:
         array_taxon = spat.import_pickle_file(out_folder_sp_dist + taxon + '_' + str(pixel_size) + '.pkl')
         range_dic_taxon = spat.import_pickle_file(out_folder_sp_dist + taxon + '_range_size.pkl')
-        for q in np.arange(0, 1.1, 0.1):
-            spat.weighted_richness_to_raster(array_taxon, range_dic_taxon, -q, out_folder_weightedS, taxon)
+        for q in np.arange(-10, 11, 1)/10: # This is to prevent weird approximation problem at zero
+            if 'birds' in taxon:
+                spat.weighted_richness_to_raster(array_taxon, range_dic_taxon, q, out_folder_weightedS, taxon, remove_sp_list = seabirds_list['binomial'])
+            else:
+                spat.weighted_richness_to_raster(array_taxon, range_dic_taxon, q, out_folder_weightedS, taxon)
      
     # Birds is a bit complicated b/c of migration
     
@@ -94,4 +101,19 @@ if __name__ == '__main__':
     # 4. Simple regression of weighted richness versus predictors
     # Predictors are divided into three groups: temperature (mean annual T & PET), productivity (AET & NDVI),
     # and Janzen's hypothesis (seasonsality, altitudinal range, and interaction)
-    
+    # This section requires the module "rpy2" and calls the R script regression.R for multiple regression.
+    out_analysis_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\output\\'
+    with open('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\regression.R', 'r') as f:
+        string = f.read()
+    multilin = STAP(string, 'multilin')    
+    for taxon in taxa:
+        for q in np.arange(-10, 11, 1)/10:
+            S_dir = out_folder_weightedS + taxon + '_weighted_richness_' + str(pixel_size) + '_' + str(q) + '.tif'
+            # The output is a list with 14 values: r-squared for the full and the three reduced models; 
+            # unique contributions of the three reduced models; and p-value of the seven variables in the full model.
+            out_taxon_q = [taxon, q] + [x for x in multilin.multilin(S_dir)]
+            # Save output to a file 
+            out_file = open(out_analysis_folder + 'multilin.txt', 'a')
+            print>>out_file, '\t'.join(map(str, out_taxon_q))
+            out_file.close()
+            

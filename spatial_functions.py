@@ -727,9 +727,9 @@ def weighted_richness_to_raster(array_sp_list, range_dic, q, out_dir, out_name, 
     for i, col in enumerate(array_sp_list):
         for j, row in enumerate(col):
             sp_row = [sp for sp in row if sp not in remove_sp_list]
-            weighted_S_array[i][j] = S_tot ** q * np.sum([(range_dic[x]/range_tot) ** q  for x in sp_row])
+            weighted_S_array[i][j] = S_tot ** (-q) * np.sum([(range_tot/range_dic[x]) ** q  for x in sp_row])
     
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
-    out_file = out_dir + '/' + out_name + '_weighted_richness_' + str(pixel_size) + '_' + str(-q) + '.tif'
+    out_file = out_dir + '/' + out_name + '_weighted_richness_' + str(pixel_size) + '_' + str(q) + '.tif'
     convert_array_to_raster(weighted_S_array, [xmin, ymax], out_file, pixel_size)
     return None

@@ -1,4 +1,7 @@
 from __future__ import division
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import os
 import numpy as np
 from scipy import stats
@@ -733,3 +736,45 @@ def weighted_richness_to_raster(array_sp_list, range_dic, q, out_dir, out_name, 
     out_file = out_dir + '/' + out_name + '_weighted_richness_' + str(pixel_size) + '_' + str(q) + '.tif'
     convert_array_to_raster(weighted_S_array, [xmin, ymax], out_file, pixel_size)
     return None
+
+def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
+    """Plot the weighing parameter q against R^2 values (full model, three reduced models, 
+    
+    and the unique contributions from the three sets of parameters.
+    The output is a 1*2 plot, with R^2 of the four models in the left subplot, and unique contributions in the right subplot.
+    Inputs:
+    results_dir: txt file with the output from multiple regression, generated in weighted_richness.py
+    taxon: string, name of the taxon
+    out_dir: directory for the output figure
+    legend: whether legend is to be included in the figure
+    
+    """
+    results = np.genfromtxt(results_dir, dtype = None, delimiter = '\t')
+    results_taxon = results[results['f0'] == taxon]
+    q, tot_r2, T_r2, prod_r2, janzen_r2, T_r2_part, prod_r2_part, janzen_r2_part = \
+        zip(*results_taxon[['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8']])
+    r2 = [tot_r2, T_r2, prod_r2, janzen_r2]
+    unique_r2 = [T_r2_part, prod_r2_part, janzen_r2_part]
+    col = ['#000000', '#FF4040', '#1874CD', '#8B7765']
+    fig = plt.figure(figsize = (7, 4))
+    ax1 = plt.subplot(1, 2, 1) 
+    line_list = [None] * 4
+    for i, r2_val in enumerate(r2):
+        line_list[i],  = plt.plot(q, r2_val, c = col[i], linewidth = 2)
+    ax1.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('R-squared', fontsize = 8)
+    plt.ylim((0, 1))
+    ax2 = plt.subplot(1, 2, 2)
+    for j, unique_r2_val in enumerate(unique_r2):
+        plt.plot(q, unique_r2_val, c = col[j + 1], linewidth = 2)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('Unique R-squared', fontsize = 8)
+    plt.ylim((0, 0.7))
+    if legend:
+        plt.legend(line_list, ['Full', 'Temperature', 'Productivity', 'Janzen'], loc = 2, prop = {'size': 10})
+    
+    plt.subplots_adjust(wspace = 0.29)
+    plt.savefig(out_dir, dpi = 600)
+    return None
+    

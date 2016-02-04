@@ -768,6 +768,7 @@ def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     ax2 = plt.subplot(1, 2, 2)
     for j, unique_r2_val in enumerate(unique_r2):
         plt.plot(q, unique_r2_val, c = col[j + 1], linewidth = 2)
+    ax2.tick_params(axis = 'both', which = 'major', labelsize = 6)
     plt.xlabel('Weighing parameter q', fontsize = 8)
     plt.ylabel('Unique R-squared', fontsize = 8)
     plt.ylim((0, 0.7))

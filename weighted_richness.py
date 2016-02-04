@@ -9,8 +9,12 @@ from osgeo import gdal
 import numpy as np
 import subprocess
 from rpy2.robjects.packages import SignatureTranslatedAnonymousPackage
-STAP = SignatureTranslatedAnonymousPackage
 
+# R script with function for multiple regression
+STAP = SignatureTranslatedAnonymousPackage
+with open('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\regression.R', 'r') as f:
+    string = f.read()
+    
 if __name__ == '__main__':
     # 1. Map species ranges onto 100km*100km grid cells, and obtain dictionaries of range sizes
     # Range maps of terrestrial mammals, birds, and amphibians are obtained from IUCN
@@ -103,8 +107,6 @@ if __name__ == '__main__':
     # and Janzen's hypothesis (seasonsality, altitudinal range, and interaction)
     # This section requires the module "rpy2" and calls the R script regression.R for multiple regression.
     out_analysis_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\output\\'
-    with open('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\regression.R', 'r') as f:
-        string = f.read()
     multilin = STAP(string, 'multilin')    
     for taxon in taxa:
         for q in np.arange(-10, 11, 1)/10:
@@ -116,4 +118,11 @@ if __name__ == '__main__':
             out_file = open(out_analysis_folder + 'multilin.txt', 'a')
             print>>out_file, '\t'.join(map(str, out_taxon_q))
             out_file.close()
-            
+    
+    # Plot q versus r-squared for the four models, as well as unique contributions from each set of variables, for each taxon
+    out_plot_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\plots\\'
+    results_multilin_dir = out_analysis_folder + 'multilin.txt'
+    for taxon in taxa:
+        out_plot_dir = out_plot_folder + taxon + '_r2_multilin.png'
+        spat.plot_r2_multilin(results_multilin_dir, taxon, out_plot_dir)
+        

@@ -3,6 +3,9 @@ from __future__ import division
 import sys
 sys.path.append('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox')
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import spatial_functions as spat
 import psycopg2
 from osgeo import gdal
@@ -55,6 +58,16 @@ if __name__ == '__main__':
      
     # Birds is a bit complicated b/c of migration
     
+    # 2'. Compute and plot the correlation between raw richness and weighted richness for each taxon
+    out_plot_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\plots\\'
+    fig_SandS = plt.figure(figsize = (10.5, 4))
+    for i, taxon in enumerate(taxa):
+        ax = plt.subplot(1, 3, i + 1)
+        spat.plot_r2_weighted_S(out_folder_weightedS, taxon, '_weighted_richness_100000_', ax = ax)
+        plt.title(taxon)
+    plt.subplots_adjust(wspace = 0.29)
+    plt.savefig(out_plot_folder + 'corrS.png', dpi = 600)
+        
     # 3. Obtain rasters of environmental variables in same projection & resolution
     # Variables included: mean annual T, PET, AET, NDVI, altitudinal range, seasonality
     in_folder_env = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\pred_vars_raw\\'
@@ -120,7 +133,6 @@ if __name__ == '__main__':
             out_file.close()
     
     # Plot q versus r-squared for the four models, as well as unique contributions from each set of variables, for each taxon
-    out_plot_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\plots\\'
     results_multilin_dir = out_analysis_folder + 'multilin.txt'
     for taxon in taxa:
         out_plot_dir = out_plot_folder + taxon + '_r2_multilin.png'

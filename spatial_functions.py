@@ -36,6 +36,11 @@ def import_shapefile(in_dir, Attr = None, AttrFilter = None):
         geom_list.append(feature.GetGeometryRef().ExportToWkt())
     return geom_list
 
+def import_raster_as_array(raster_dir):
+    raster = gdal.Open(raster_dir)
+    band = raster.GetRasterBand(1).ReadAsArray()
+    return band
+
 def range_dic_to_csv(in_dir, out_dir, remove_list = []):
     """Read in a dictionary of range sizes for a taxon and convert it to csv for processing in R."""
     range_dic = import_pickle_file(in_dir)
@@ -737,6 +742,36 @@ def weighted_richness_to_raster(array_sp_list, range_dic, q, out_dir, out_name, 
     convert_array_to_raster(weighted_S_array, [xmin, ymax], out_file, pixel_size)
     return None
 
+def plot_r2_weighted_S(weighted_S_folder, taxon, file_ext, ax = None):
+    """Obtain r2 between S and weighted S at different values of q, 
+    
+    and plot them against q. 
+    Inputs:
+    weighted_S_folder: folder where the raster files of weighted S are located
+    taxon: taxon of interest
+    file_ext: "middle part" of file name, current in the form of "_weighted_richness_100000_"
+        The full file name would be taxon + file_ext + q + '.tif'
+    ax: plotting frame. If None, a new one will be created.
+    Returns ax with the plot.
+    
+    """
+    r2_list = []
+    orig_S_dir = weighted_S_folder + taxon + file_ext + str(0.0) + '.tif'
+    orig_S = np.ndarray.flatten(import_raster_as_array(orig_S_dir))
+    orig_S_no_zero = orig_S[orig_S > 0]
+    for q in np.arange(-10, 11, 1)/10:
+        weighted_S_dir = weighted_S_folder + taxon + file_ext + str(q) + '.tif'
+        weighted_S = np.ndarray.flatten(import_raster_as_array(weighted_S_dir))
+        weighted_S_no_zero = weighted_S[orig_S > 0]
+        r = stats.pearsonr(orig_S_no_zero, weighted_S_no_zero)[0] 
+        r2_list.append(r)
+    # Plot
+    plt.plot(np.arange(-10, 11, 1)/10, r2_list, c = '#000000', linewidth = 2)
+    ax.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('Correlation r between weighted S and raw S', fontsize = 8)
+    return ax 
+        
 def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     """Plot the weighing parameter q against R^2 values (full model, three reduced models, 
     

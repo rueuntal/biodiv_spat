@@ -41,6 +41,15 @@ if __name__ == '__main__':
                                     Attr = "SEASONAL", Attr_filter = "1", pixel_size = pixel_size)
     spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_resident_range_size.pkl', Attr = "SEASONAL", 
                                   Attr_filter = "1")
+    # Maps & range size dictionaries for resident + breeding birds, as well as resident + wintering birds
+    spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_breeding_' + str(pixel_size) + '.pkl',
+                                        Attr = "SEASONAL", Attr_filter = ["1", "2"], pixel_size = pixel_size)
+    spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_breeding_range_size.pkl', Attr = "SEASONAL", 
+                                  Attr_filter = ["1", "2"])
+    spat.create_array_sp_list_birds(birds_folder, out_folder_sp_dist + 'birds_wintering_' + str(pixel_size) + '.pkl',
+                                        Attr = "SEASONAL", Attr_filter = ["1", "3"], pixel_size = pixel_size)
+    spat.create_sp_range_dic_bird(birds_folder, out_folder_sp_dist + 'birds_wintering_range_size.pkl', Attr = "SEASONAL", 
+                                  Attr_filter = ["1", "3"])    
     
     # 2. Compute the weighted richness
     out_folder_weightedS = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\weighted_S\\'

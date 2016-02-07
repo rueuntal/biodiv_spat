@@ -222,7 +222,12 @@ def sp_reproj_birds(folder, file_name, Attr = None, Attr_filter = None):
     in_dir = folder + '/' + file_name
     file_split = file_name.split('_')
     sp_name = file_split[0] + ' ' + file_split[1]
-    sp_geom_list = import_shapefile(in_dir, Attr = Attr, AttrFilter = Attr_filter)
+    if isinstance(Attr_filter, basestring): # If Attr_filter is a string, i.e., a single value
+        sp_geom_list = import_shapefile(in_dir, Attr = Attr, AttrFilter = Attr_filter)
+    else: 
+        sp_geom_list = []
+        for ind_filter in Attr_filter: 
+            sp_geom_list.extend(import_shapefile(in_dir, Attr = Attr, AttrFilter = ind_filter))
     if len(sp_geom_list) > 0: # If Attribute exists
         sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
         try:

@@ -52,8 +52,10 @@ if __name__ == '__main__':
                                   Attr_filter = ["1", "3"])    
     
     # 2. Compute the weighted richness
+    # Birds is a bit complicated b/c of migration
+    # Separate breeding (breeding + resident) and wintering (non-breeding + resident) communities    
     out_folder_weightedS = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\weighted_S\\'
-    taxa.extend(['birds_resident'])  # Now only looking at resident birds; TO BE MODIFIED LATER
+    taxa.extend(['birds_resident', 'birds_breeding', 'birds_wintering'])  
     seabirds_list = np.genfromtxt('C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\seabirds.csv', dtype = None, \
                                    delimiter = ',', skip_header = 1, names = ['common name', 'binomial'])    
     for taxon in taxa:
@@ -64,9 +66,7 @@ if __name__ == '__main__':
                 spat.weighted_richness_to_raster(array_taxon, range_dic_taxon, q, out_folder_weightedS, taxon, remove_sp_list = seabirds_list['binomial'])
             else:
                 spat.weighted_richness_to_raster(array_taxon, range_dic_taxon, q, out_folder_weightedS, taxon)
-     
-    # Birds is a bit complicated b/c of migration
-    
+         
     # 2'. Compute and plot the correlation between raw richness and weighted richness for each taxon
     out_plot_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\plots\\'
     fig_SandS = plt.figure(figsize = (10.5, 4))
@@ -101,24 +101,11 @@ if __name__ == '__main__':
     alt_range_dir = out_folder_env + 'alt_range.tif'
     spat.get_range_raster(alt_max_dir, alt_min_dir, alt_range_dir)
     
-    # PET is obtained from CGIAR-CSI
+    # PET and AET are obtained from CGIAR-CSI
     in_folder_pet = in_folder_env + 'PET_he_annual\\pet_he_yr\\'
     spat.reproj_raster_to_match(in_folder_pet + 'w001001.adf', out_folder_env + 'PET.tif', match_file)
-    
-    # AET is obtained from MOD16
-    file_AET = in_folder_env + 'mean_annual_AET\\MOD16A3_ET_2000_to_2013_mean.tif'
-    # Replace the null values (>65500) with zeros
-    AET_raster_orig = gdal.Open(file_AET)
-    AET_band_orig  = AET_raster_orig.GetRasterBand(1)
-    AET_array = AET_band_orig.ReadAsArray()
-    AET_array[AET_array > 65500] = 0
-    # Write modifed array back to file
-    AET_geotrans = AET_raster_orig.GetGeoTransform()
-    xmin, ymax, pixel_size = AET_geotrans[0], AET_geotrans[3], AET_geotrans[1]
-    spat.convert_array_to_raster(AET_array, (xmin, ymax), out_folder_env + 'AET_raw.tif', pixel_size, 
-                                 out_proj = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-    # Convert to Behrmann
-    spat.reproj_raster_to_match(out_folder_env + 'AET_raw.tif', out_folder_env + 'AET.tif', match_file)
+    in_folder_aet = in_folder_env + 'AET_YR\\aet_yr\\'
+    spat.reproj_raster_to_match(in_folder_aet + 'w001001.adf', out_folder_env + 'AET.tif', match_file)
     
     # NDVI is obtained from FAO: http://www.fao.org/geonetwork/srv/en/metadata.show?id=37058
     file_NDVI = in_folder_env + 'Global annual sum NDVI Fig S5a\\Fig S5a.img'

@@ -888,3 +888,20 @@ def obtain_avg_ndvi(in_folder, start_year, end_year, out_folder):
         outRaster.FlushCache()
         outRaster = None
     return None
+
+def reproj_monthly_file(in_folder, in_file_1, in_file_2, out_folder, out_file_name, match_file, with_zero = False):
+    """Reproject the monthly average environmental rasters to the designated projection and resolution.
+    
+    The input file has the path in_folder + in_file_1 + month + in_file_2
+    The output file has the path out_folder + out_file_name + month + '.tif'
+    
+    """
+    for month in range(1, 13):
+        if len(str(month)) == 1: month_str = '0' + str(month)
+        else: month_str = str(month)
+        if with_zero is False:
+            in_dir = in_folder + in_file_1 + str(month) + in_file_2
+        else: in_dir = in_folder + in_file_2 + month_str + in_file_2
+        out_dir = out_folder + out_file_name + month_str + '.tif'
+        reproj_raster_to_match(in_dir, out_dir, match_file)
+    return None

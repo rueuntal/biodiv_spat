@@ -818,4 +818,39 @@ def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     plt.subplots_adjust(wspace = 0.29)
     plt.savefig(out_dir, dpi = 600)
     return None
+ 
+def obtain_avg_ndvi(in_folder, start_year, end_year, out_dir):
+    """Average NDVI across the grid using monthly data from multiple years.
     
+    This is a highly specific function that only works with NDVI data in the same form
+    as those from GIMMS. 
+    """
+    start_year, end_year = int(start_year), int(end_year)
+    raster_list = []
+    nodata_list = [-99, -88, -77]
+    # First sum over months within each year, then take average across years
+    for year in range(start_year, end_year + 1):
+        year_list = []
+        for month in range(1, 13):
+            if len(str(month)) == 1: month_str = '0' + str(month)
+            else: month_str = str(month)
+            file_name = 'gimms_ndvi_qd_' + str(year) + month_str + '00.asc'
+            file_array = import_raster_as_array(in_folder + file_name)
+            for item in nodata_list: file_array[file_array == item] = float('nan')
+            year_list.append(file_array)
+        year_sum = np.nansum(np.array(year_list), axis = 0)
+        raster_list.append(year_sum)
+    mean_raster = np.nanmean(np.array(raster_list), axis = 0)
+    mean_raster[np.isnan(mean_raster)] = -99
+    
+    last_file = gdal.Open(in_folder + file_name)
+    proj = osr.SpatialReference()
+    proj.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+    proj_wkt = proj.ExportToWkt()
+    geotrans = last_file.GetGeoTransform()
+    outRaster = write_raster_to_file(out_dir, len(mean_raster[0]), len(mean_raster), geotrans, proj_wkt, nodata = -99)
+    outband = outRaster.GetRasterBand(1)
+    outband.WriteArray(mean_raster)
+    outRaster.FlushCache()
+    outRaster = None
+    return None

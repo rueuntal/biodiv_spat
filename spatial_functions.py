@@ -820,7 +820,7 @@ def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     return None
  
 def obtain_avg_ndvi(in_folder, start_year, end_year, out_dir):
-    """Average NDVI across the grid using monthly data from multiple years.
+    """Mean annual NDVI across the grid using monthly data from multiple years.
     
     This is a highly specific function that only works with NDVI data in the same form
     as those from GIMMS. 
@@ -853,4 +853,38 @@ def obtain_avg_ndvi(in_folder, start_year, end_year, out_dir):
     outband.WriteArray(mean_raster)
     outRaster.FlushCache()
     outRaster = None
+    return None
+
+def obtain_avg_ndvi(in_folder, start_year, end_year, out_folder):
+    """NDVI for each month across multiple years.
+    The output has the file name "NDVI_month_WGS84.tif', with "month" running from "01" to "12".
+    This is a highly specific function that only works with NDVI data in the same form
+    as those from GIMMS. 
+    
+    """
+    start_year, end_year = int(start_year), int(end_year)
+    for month in range(1, 13):
+        if len(str(month)) == 1: month_str = '0' + str(month)
+        else: month_str = str(month)
+        raster_list = []
+        for year in range(start_year, end_year + 1):
+            file_name = 'gimms_ndvi_qd_' + str(year) + month_str + '00.asc'
+            file_array = import_raster_as_array(in_folder + file_name)
+            file_raster = gdal.Open(in_folder + file_name)
+            file_nodata = file_raster.GetRasterBand(1).GetNoDataValue()
+            file_array[file_array == file_nodata] = float('nan')
+            raster_list.append(file_array)
+        month_mean = np.nanmean(np.array(raster_list), axis = 0)
+        month_mean[np.isnan(month_mean)] = file_nodata
+        
+        out_dir_month = out_folder + 'NDVI_' + month_str + '_WGS84.tif'
+        proj = osr.SpatialReference()
+        proj.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+        proj_wkt = proj.ExportToWkt()
+        geotrans = file_raster.GetGeoTransform()        
+        outRaster = write_raster_to_file(out_dir_month, len(month_mean[0]), len(month_mean), geotrans, proj_wkt, nodata = file_nodata)
+        outband = outRaster.GetRasterBand(1)
+        outband.WriteArray(month_mean)
+        outRaster.FlushCache()
+        outRaster = None
     return None

@@ -107,9 +107,12 @@ if __name__ == '__main__':
     in_folder_aet = in_folder_env + 'AET_YR\\aet_yr\\'
     spat.reproj_raster_to_match(in_folder_aet + 'w001001.adf', out_folder_env + 'AET.tif', match_file)
     
-    # NDVI is obtained from FAO: http://www.fao.org/geonetwork/srv/en/metadata.show?id=37058
-    file_NDVI = in_folder_env + 'Global annual sum NDVI Fig S5a\\Fig S5a.img'
-    spat.reproj_raster_to_match(file_NDVI, out_folder_env + 'NDVI.tif', match_file)
+    # Monthly NDVI is obtained from GIMMS: https://daac.ornl.gov/ISLSCP_II/guides/gimms_ndvi_monthly_xdeg.html
+    # Mean annual NDVI is calculated by taking the average across the files
+    # Only valid values (between -1 and 1) are included
+    in_folder_monthly_ndvi = in_folder_env + 'monthly\\gimms_ndvi_qd_1981-2002\\'
+    spat.obtain_avg_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_env + 'NDVI_WGS84.tif')
+    spat.reproj_raster_to_match(out_folder_env + 'NDVI_WGS84.tif', out_folder_env + 'NDVI.tif', match_file)
     
     # 4. Simple regression of weighted richness versus predictors
     # Predictors are divided into three groups: temperature (mean annual T & PET), productivity (AET & NDVI),
@@ -133,4 +136,9 @@ if __name__ == '__main__':
     for taxon in taxa:
         out_plot_dir = out_plot_folder + taxon + '_r2_multilin.png'
         spat.plot_r2_multilin(results_multilin_dir, taxon, out_plot_dir)
-        
+    
+    # 5. Obtain environmental rasters for breeding and wintering seasons
+    # Breeding season is defined as the month with the highest monthly average NDVI for each cell
+    # Wintering season is defined as 6 months from the breeding season
+    # All other variables are selected based on the timing of NDVI
+    

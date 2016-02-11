@@ -144,4 +144,14 @@ if __name__ == '__main__':
     # All other variables are selected based on the timing of NDVI
     # 5a. Obtain average NDVI for each month 
     spat.obtain_avg_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_monthly_ndvi)
+    # 5b. Reproject monthly temperature, PET, AET, NDVI to the designated projection and resolution
+    spat.reproj_monthly_file(in_folder_env + 'monthly\\tmean_10m_bil\\', 'tmean', '.bil', \
+                             out_folder_env + 'monthly\\mean_T\\', 'mean_T', match_file)
+    spat.reproj_monthly_file(in_folder_env + 'monthly\\PET_he_monthly\\', 'pet_he_', '\\w001001.adf', \
+                             out_folder_env + 'monthly\\PET\\', 'PET', match_file)
+    spat.reproj_monthly_file(in_folder_env + 'monthly\\Monthly AET\\', 'aet_', '\\w001001.adf', \
+                             out_folder_env + 'monthly\\AET\\', 'AET', match_file)
+    spat.reproj_monthly_file(in_folder_env + 'monthly\\monthly_ndvi\\', 'NDVI_', '_WGS84.tif', \
+                                 out_folder_env + 'monthly\\NDVI\\', 'NDVI', match_file, with_zero = True)
+    
     

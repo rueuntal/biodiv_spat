@@ -12,12 +12,8 @@ from osgeo import gdal
 import numpy as np
 import subprocess
 from rpy2.robjects.packages import SignatureTranslatedAnonymousPackage
-
-# R script with function for multiple regression
 STAP = SignatureTranslatedAnonymousPackage
-with open('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\regression.R', 'r') as f:
-    string = f.read()
-    
+
 if __name__ == '__main__':
     # Define the variables and inputs
     taxa = ['terrestrial_mammals', 'amphibians']
@@ -41,6 +37,10 @@ if __name__ == '__main__':
     in_folder_monthly_ndvi = in_folder_env + 'monthly\\gimms_ndvi_qd_1981-2002\\'
     out_analysis_folder = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\output\\'
     out_folder_monthly_ndvi = in_folder_env + 'monthly\\monthly_ndvi\\'
+    # R script with function for multiple regression
+    with open('C:\\Users\\Xiao\\Documents\\GitHub\\gis_sandbox\\regression.R', 'r') as f:
+        string = f.read()
+    multilin = STAP(string, 'multilin')     
     
     # 1. Map species ranges onto 100km*100km grid cells, and obtain dictionaries of range sizes
     # Range maps of terrestrial mammals, birds, and amphibians are obtained from IUCN
@@ -132,12 +132,6 @@ if __name__ == '__main__':
             print>>out_file, '\t'.join(map(str, out_taxon_q))
             out_file.close()
     
-    # Plot q versus r-squared for the four models, as well as unique contributions from each set of variables, for each taxon
-    results_multilin_dir = out_analysis_folder + 'multilin.txt'
-    for taxon in taxa + ['birds_resident']:
-        out_plot_dir = out_plot_folder + taxon + '_r2_multilin.png'
-        spat.plot_r2_multilin(results_multilin_dir, taxon, out_plot_dir)
-    
     # 5. Obtain environmental rasters for breeding and wintering seasons
     # Breeding season is defined as the month with the highest monthly average NDVI for each cell
     # Wintering season is defined as 6 months from the breeding season
@@ -163,3 +157,19 @@ if __name__ == '__main__':
                                 out_folder_env + 'NDVI_max_month.tif', with_zero = True)
         spat.obtain_max_min_var(out_folder_env + 'monthly\\' + var + '\\', var, '.tif', out_folder_env, var, \
                                 out_folder_env + 'NDVI_max_month.tif', max = False, with_zero = True)        
+        
+    # 4'. Regress breeding and wintering bird communities again their correpsonding environmental conditions    
+    for taxon in ['birds_breeding', 'birds_wintering']:
+        cond = str.split(taxon, '_')[1]
+        for q in np.arange(-10, 11, 1)/10:
+            S_dir = out_folder_weightedS + taxon + '_weighted_richness_' + str(pixel_size) + '_' + str(q) + '.tif'
+            out_taxon_q = [taxon, q] + [x for x in multilin.multilin(S_dir, env = cond)]
+            out_file = open(out_analysis_folder + 'multilin.txt', 'a')
+            print>>out_file, '\t'.join(map(str, out_taxon_q))
+            out_file.close()
+    
+    # Plot q versus r-squared for the four models, as well as unique contributions from each set of variables, for each taxon
+    results_multilin_dir = out_analysis_folder + 'multilin.txt'
+    for taxon in taxa + taxa_birds:
+        out_plot_dir = out_plot_folder + taxon + '_r2_multilin.png'
+        spat.plot_r2_multilin(results_multilin_dir, taxon, out_plot_dir)

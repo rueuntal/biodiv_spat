@@ -113,7 +113,7 @@ if __name__ == '__main__':
     # Monthly NDVI is obtained from GIMMS: https://daac.ornl.gov/ISLSCP_II/guides/gimms_ndvi_monthly_xdeg.html
     # Mean annual NDVI is calculated by taking the average across the files
     # Only valid values (between -1 and 1) are included
-    spat.obtain_avg_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_env + 'NDVI_WGS84.tif')
+    spat.obtain_mean_annual_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_env + 'NDVI_WGS84.tif')
     spat.reproj_raster_to_match(out_folder_env + 'NDVI_WGS84.tif', out_folder_env + 'NDVI.tif', match_file)
     
     # 4. Simple regression of weighted richness versus predictors
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # and Janzen's hypothesis (seasonsality, altitudinal range, and interaction)
     # This section requires the module "rpy2" and calls the R script regression.R for multiple regression.
     multilin = STAP(string, 'multilin')    
-    for taxon in taxa:
+    for taxon in taxa + ['birds_resident']:
         for q in np.arange(-10, 11, 1)/10:
             S_dir = out_folder_weightedS + taxon + '_weighted_richness_' + str(pixel_size) + '_' + str(q) + '.tif'
             # The output is a list with 14 values: r-squared for the full and the three reduced models; 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     # Wintering season is defined as 6 months from the breeding season
     # All other variables are selected based on the timing of NDVI
     # 5a. Obtain average NDVI for each month 
-    spat.obtain_avg_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_monthly_ndvi)
+    spat.obtain_monthly_avg_ndvi(in_folder_monthly_ndvi, 1982, 2002, out_folder_monthly_ndvi)
     # 5b. Reproject monthly temperature, PET, AET, NDVI to the designated projection and resolution
     spat.reproj_monthly_file(in_folder_env + 'monthly\\tmean_10m_bil\\', 'tmean', '.bil', \
                              out_folder_env + 'monthly\\mean_T\\', 'mean_T', match_file)
@@ -153,5 +153,13 @@ if __name__ == '__main__':
                              out_folder_env + 'monthly\\AET\\', 'AET', match_file)
     spat.reproj_monthly_file(in_folder_env + 'monthly\\monthly_ndvi\\', 'NDVI_', '_WGS84.tif', \
                                  out_folder_env + 'monthly\\NDVI\\', 'NDVI', match_file, with_zero = True)
-    
-    
+    # 5c. Obtain highest NDVI for each cell, as well as the corresponding months
+    spat.obtain_annual_monthly_max(out_folder_env + 'monthly\\NDVI\\', 'NDVI', '.tif', out_folder_env, 'NDVI', with_zero = True)
+    # 5d. Obtain rasters for other variables corresponding to the breeding and wintering months given by NDVI 
+    spat.obtain_max_min_var(out_folder_env + 'monthly\\NDVI\\', 'NDVI', '.tif', out_folder_env, 'NDVI', \
+                            out_folder_env + 'NDVI_max_month.tif', max = False, with_zero = True)
+    for var in ['AET', 'PET', 'mean_T']:
+        spat.obtain_max_min_var(out_folder_env + 'monthly\\' + var + '\\', var, '.tif', out_folder_env, var, \
+                                out_folder_env + 'NDVI_max_month.tif', with_zero = True)
+        spat.obtain_max_min_var(out_folder_env + 'monthly\\' + var + '\\', var, '.tif', out_folder_env, var, \
+                                out_folder_env + 'NDVI_max_month.tif', max = False, with_zero = True)        

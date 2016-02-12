@@ -855,7 +855,7 @@ def obtain_mean_annual_ndvi(in_folder, start_year, end_year, out_dir):
     outRaster = None
     return None
 
-def obtain_avg_ndvi(in_folder, start_year, end_year, out_folder):
+def obtain_monthly_avg_ndvi(in_folder, start_year, end_year, out_folder):
     """NDVI for each month across multiple years.
     The output has the file name "NDVI_month_WGS84.tif', with "month" running from "01" to "12".
     This is a highly specific function that only works with NDVI data in the same form
@@ -907,7 +907,7 @@ def reproj_monthly_file(in_folder, in_file_1, in_file_2, out_folder, out_file_na
         reproj_raster_to_match(in_dir, out_dir, match_file)
     return None
 
-def obtain_annual_monthly_max(in_folder, in_file_1, in_file_2, out_folder, out_name, with_zero = True):
+def obtain_annual_monthly_max(in_folder, in_file_1, in_file_2, out_folder, out_name, with_zero = False):
     """Given 12 monthly layers of one environmental variable, 
     
     create a raster with the max value across months for each cell, as well as a raster
@@ -952,4 +952,48 @@ def obtain_annual_monthly_max(in_folder, in_file_1, in_file_2, out_folder, out_n
     outRaster_month.FlushCache()
     outRaster_month = None
     return None
+
+def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, max_month_dir, max = True, with_zero = False):
+    """Given 12 monthly rasters of one environmental variable, obtain a new raster corresponding to the months given by the raster
     
+    at max_month_dir. 
+    Inputs:
+    in_folder, in_file_1, in_file_2: inputs to define input file paths, which are in the format in_folder + in_file_1 + month + in_file_2.
+    out_folder: folder to which the output will be saved.
+    max_month_dir: path of the raster given the desirable months ("max" months). Should be in same resolution and projection as input files.
+    out_folder, out_name: defines the output path, which is in the format out_folder + out_name + '_' + max or min + '.tif'
+    max: whether the output is the max (corresponding to the given months) or the min (corresponding to 6 months from the max month)
+    with_zero: whether "month" in the input files contains zeros or not
+    
+    """
+    month_array = import_raster_as_array(max_month_dir)
+    if max is not True: month_array = (month_array + 6)%12
+    monthly_var_list = []
+    for month in range(1, 13):
+        if len(str(month)) == 1: month_str = '0' + str(month)
+        else: month_str = str(month)
+        if with_zero is False:
+            in_dir = in_folder + in_file_1 + str(month) + in_file_2
+        else: in_dir = in_folder + in_file_1 + month_str + in_file_2
+        monthly_var_list.append(import_raster_as_array(in_dir))
+    
+    monthly_var_list = np.array(monthly_var_list)
+    var_file = gdal.Open(in_dir)
+    nodata = var_file.GetRasterBand(1).GetNoDataValue()
+    month_file = gdal.Open(max_month_dir)
+    nodata_month = month_file.GetRasterBand(1).GetNoDataValue()
+    # Self-reminder below: k is "column", j is "row"
+    out = [[monthly_var_list[month_array[j][k] - 1][j][k] if month_array[j][k] is not nodata_month \
+            else nodata for k in range(len(month_array[0]))] for j in range(len(month_array))]
+    out = np.array(out)
+    # Write to file
+    proj_wkt = var_file.GetProjection()
+    geotrans = var_file.GetGeoTransform()
+    if max: out_dir = out_folder + out_name + '_max.tif'
+    else: out_dir = out_folder + out_name + '_min.tif'
+    outRaster = write_raster_to_file(out_dir, len(out[0]), len(out), geotrans, proj_wkt, nodata = nodata)
+    outband = outRaster.GetRasterBand(1)
+    outband.WriteArray(out)
+    outRaster.FlushCache()
+    outRaster = None
+    return None

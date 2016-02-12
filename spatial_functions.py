@@ -819,7 +819,7 @@ def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     plt.savefig(out_dir, dpi = 600)
     return None
  
-def obtain_avg_ndvi(in_folder, start_year, end_year, out_dir):
+def obtain_mean_annual_ndvi(in_folder, start_year, end_year, out_dir):
     """Mean annual NDVI across the grid using monthly data from multiple years.
     
     This is a highly specific function that only works with NDVI data in the same form
@@ -863,6 +863,7 @@ def obtain_avg_ndvi(in_folder, start_year, end_year, out_folder):
     
     """
     start_year, end_year = int(start_year), int(end_year)
+    nodata_list = [-99, -88, -77]
     for month in range(1, 13):
         if len(str(month)) == 1: month_str = '0' + str(month)
         else: month_str = str(month)
@@ -872,7 +873,7 @@ def obtain_avg_ndvi(in_folder, start_year, end_year, out_folder):
             file_array = import_raster_as_array(in_folder + file_name)
             file_raster = gdal.Open(in_folder + file_name)
             file_nodata = file_raster.GetRasterBand(1).GetNoDataValue()
-            file_array[file_array == file_nodata] = float('nan')
+            for item in nodata_list: file_array[file_array == item] = float('nan')
             raster_list.append(file_array)
         month_mean = np.nanmean(np.array(raster_list), axis = 0)
         month_mean[np.isnan(month_mean)] = file_nodata
@@ -901,7 +902,54 @@ def reproj_monthly_file(in_folder, in_file_1, in_file_2, out_folder, out_file_na
         else: month_str = str(month)
         if with_zero is False:
             in_dir = in_folder + in_file_1 + str(month) + in_file_2
-        else: in_dir = in_folder + in_file_2 + month_str + in_file_2
+        else: in_dir = in_folder + in_file_1 + month_str + in_file_2
         out_dir = out_folder + out_file_name + month_str + '.tif'
         reproj_raster_to_match(in_dir, out_dir, match_file)
     return None
+
+def obtain_annual_monthly_max(in_folder, in_file_1, in_file_2, out_folder, out_name, with_zero = True):
+    """Given 12 monthly layers of one environmental variable, 
+    
+    create a raster with the max value across months for each cell, as well as a raster
+    that stores the month identifier (1-12) for each cell. 
+    The input file is assumed to have the path in_folder + in_file_1 + month (with or without zero) + in_file_2
+    The output environemntal raster has the path out_folder + out_name + '_max.tif'
+    The output month identifier raster has the path out_folder + out_name + '_max_month.tif'
+    
+    """
+    monthly_list = []
+    for month in range(1, 13):
+        if len(str(month)) == 1: month_str = '0' + str(month)
+        else: month_str = str(month)
+        if with_zero is False:
+            in_dir = in_folder + in_file_1 + str(month) + in_file_2
+        else: in_dir = in_folder + in_file_1 + month_str + in_file_2
+        month_file = gdal.Open(in_dir)
+        month_array = import_raster_as_array(in_dir)
+        monthly_list.append(month_array)
+ 
+    monthly_max = np.nanmax(np.array(monthly_list), axis = 0)
+    max_month = np.nanargmax(np.array(monthly_list), axis = 0)
+    
+    # Replace cells with no data values with 0 for month
+    nodata = month_file.GetRasterBand(1).GetNoDataValue()
+    max_month[monthly_max == nodata] = 0
+     
+    # Write to file
+    proj_wkt = month_file.GetProjection()
+    geotrans = month_file.GetGeoTransform()
+    out_dir_max = out_folder + out_name + '_max.tif'
+    outRaster_max = write_raster_to_file(out_dir_max, len(monthly_max[0]), len(monthly_max), geotrans, proj_wkt, nodata = nodata)
+    outband_max = outRaster_max.GetRasterBand(1)
+    outband_max.WriteArray(monthly_max)
+    outRaster_max.FlushCache()
+    outRaster_max = None
+    
+    out_dir_month = out_folder + out_name + '_max_month.tif'
+    outRaster_month = write_raster_to_file(out_dir_month, len(max_month[0]), len(max_month), geotrans, proj_wkt, nodata = 0)
+    outband_month = outRaster_month.GetRasterBand(1)
+    outband_month.WriteArray(max_month)
+    outRaster_month.FlushCache()
+    outRaster_month = None
+    return None
+    

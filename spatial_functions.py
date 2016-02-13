@@ -966,8 +966,6 @@ def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, ma
     with_zero: whether "month" in the input files contains zeros or not
     
     """
-    month_array = import_raster_as_array(max_month_dir)
-    if max is not True: month_array = (month_array + 6)%12
     monthly_var_list = []
     for month in range(1, 13):
         if len(str(month)) == 1: month_str = '0' + str(month)
@@ -982,6 +980,13 @@ def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, ma
     nodata = var_file.GetRasterBand(1).GetNoDataValue()
     month_file = gdal.Open(max_month_dir)
     nodata_month = month_file.GetRasterBand(1).GetNoDataValue()
+    
+    month_array = import_raster_as_array(max_month_dir)
+    if max is not True:  # Minimum instead of maximum month
+        month_array[month_array == nodata_month] = float('nan')
+        month_array = (month_array + 6)%12 
+        month_array[month_array == 0] = 12
+        month_array[np.isnan(month_array)] = nodata_month
     # Self-reminder below: k is "column", j is "row"
     out = [[monthly_var_list[month_array[j][k] - 1][j][k] if month_array[j][k] is not nodata_month \
             else nodata for k in range(len(month_array[0]))] for j in range(len(month_array))]

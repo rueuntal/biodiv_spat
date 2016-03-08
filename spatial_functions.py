@@ -929,7 +929,7 @@ def obtain_annual_monthly_max(in_folder, in_file_1, in_file_2, out_folder, out_n
         monthly_list.append(month_array)
  
     monthly_max = np.nanmax(np.array(monthly_list), axis = 0)
-    max_month = np.nanargmax(np.array(monthly_list), axis = 0)
+    max_month = np.nanargmax(np.array(monthly_list), axis = 0) + 1
     
     # Replace cells with no data values with 0 for month
     nodata = month_file.GetRasterBand(1).GetNoDataValue()

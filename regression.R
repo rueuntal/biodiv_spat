@@ -7,17 +7,18 @@ library(raster)
 
 # This function reads in the raster from S_dir, and conducts linear regression between 
 # S and the environmental variables. 
-# The full model is S ~ (temp + PET) + (AET + NDVI) + (alt range * seasonality).
+# The full model is S ~ (AET + NDVI) + (alt range * seasonality).
 # The path of the environmental rasters are fixed.
-# It returns the following 14 values (in this order): 
-# r^2 for the full, the temperature, the productivity and Janzen's models
-# Unique contribution of temperature, productivity, and Janzen's effect
-# p-value of the seven variables in the full model
+# It returns the following 13 values (in this order): 
+# r^2 for the full, the productivity and Janzen's models
+# Unique contribution of productivity and Janzen's effect
+# Unique contribution of altitudinal range, seasonality, and interaction in Janzen's model
+# p-value of the five variables in the full model
 multilin = function(S_dir, env = 'annual'){
   dat = c(as.matrix(raster(S_dir)))
   pred_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\pred_vars\\'
   if (env == 'annual'){
-    pred_names = c('mean_annual_T', 'PET', 'AET', 'NDVI', 'alt_range', 'seasonality')
+    pred_names = c('AET', 'NDVI', 'alt_range', 'seasonality')
   } else if (env == 'breeding'){
     pred_names = c('mean_T_max', 'PET_max', 'AET_max', 'NDVI_max', 'alt_range', 'seasonality')
   } else {
@@ -29,27 +30,28 @@ multilin = function(S_dir, env = 'annual'){
     dat = cbind(dat, pred_raster)
   }
   dat = as.data.frame(dat)
-  names(dat) = c('S', pred_names)
+  dat[, 6] = dat[, 4] * dat[, 5]
+  names(dat) = c('S', pred_names, 'altbyseas')
   # Only keep rows where all variables are available
   index = complete.cases(dat)
   dat = dat[index, ]
   
-  out = vector(mode = 'numeric', length = 14)
-  full_model = lm(log(dat[, 1]) ~ dat[, 2] + dat[, 3] + dat[, 4] + dat[, 5] + dat[, 6] * dat[, 7])
+  out = vector(mode = 'numeric', length = 13)
+  full_model = lm(log(dat$S) ~ dat$AET + dat$NDVI + dat$alt_range*dat$seasonality)
   out[1] = summary(full_model)$r.squared
-  out[8:14] = as.numeric(summary(full_model)$coef[2:8, 4])
-  T_model = lm(log(dat[, 1]) ~ dat[, 2] + dat[, 3])
-  out[2] = summary(T_model)$r.squared
-  no_T_model = lm(log(dat[, 1]) ~ dat[, 4] + dat[, 5] + dat[, 6] * dat[, 7])
-  out[5] = summary(full_model)$r.squared - summary(no_T_model)$r.squared
-  prod_model = lm(log(dat[, 1]) ~ dat[, 4] + dat[, 5])
-  out[3] = summary(prod_model)$r.squared
-  no_prod_model = lm(log(dat[, 1]) ~ dat[, 2] + dat[, 3] + dat[, 6] * dat[, 7])
-  out[6] = summary(full_model)$r.squared - summary(no_prod_model)$r.squared
-  Janzen_model = lm(log(dat[, 1]) ~ dat[, 6] * dat[, 7])
-  out[4] = summary(Janzen_model)$r.squared
-  no_Janzen_model = lm(log(dat[, 1]) ~ dat[, 2] + dat[, 3] + dat[, 4] + dat[, 5])
-  out[7] = summary(full_model)$r.squared - summary(no_Janzen_model)$r.squared
+  out[9:13] = as.numeric(summary(full_model)$coef[2:6, 4])
+  prod_model = lm(log(dat$S) ~ dat$AET + dat$NDVI)
+  out[2] = summary(prod_model)$r.squared
+  Janzen_model = lm(log(dat$S) ~ dat$alt_range*dat$seasonality)
+  out[3] = summary(Janzen_model)$r.squared
+  out[4] = out[1] - out[3] # Unique r2 of productivity
+  out[5] = out[1] - out[2] # Unique r2 of Janzen
+  no_alt_model = lm(log(dat$S) ~ dat$seasonality + dat$altbyseas)
+  no_seas_model = lm(log(dat$S) ~ dat$alt_range + dat$altbyseas)
+  no_int_model = lm(log(dat$S) ~ dat$seasonality + dat$alt_range)
+  out[6] = out[3] - summary(no_alt_model)$r.squared
+  out[7] = out[3] - summary(no_seas_model)$r.squared
+  out[8] = out[3] - summary(no_int_model)$r.squared
   return(out)
 }
 

@@ -14,7 +14,7 @@ library(raster)
 # Unique contribution of productivity and Janzen's effect
 # Unique contribution of altitudinal range, seasonality, and interaction in Janzen's model
 # p-value of the five variables in the full model
-multilin = function(S_dir, env = 'annual'){
+multilin = function(S_dir, env = 'annual', transform = 'untransformed'){
   dat = c(as.matrix(raster(S_dir)))
   pred_dir = 'C:\\Users\\Xiao\\Dropbox\\projects\\range_size_dist\\Janzen\\pred_vars\\'
   if (env == 'annual'){
@@ -36,19 +36,27 @@ multilin = function(S_dir, env = 'annual'){
   index = complete.cases(dat)
   dat = dat[index, ]
   
+  # Optional transformation of S
+  if (transform == 'log'){
+    dat$S = log(dat$S)
+  }
+  else if (transform == 'sqrt'){
+    dat$S = sqrt(dat$S)
+  }
+  
   out = vector(mode = 'numeric', length = 13)
-  full_model = lm(log(dat$S) ~ dat$AET + dat$NDVI + dat$alt_range*dat$seasonality)
+  full_model = lm(dat$S ~ dat$AET + dat$NDVI + dat$alt_range*dat$seasonality)
   out[1] = summary(full_model)$r.squared
   out[9:13] = as.numeric(summary(full_model)$coef[2:6, 4])
-  prod_model = lm(log(dat$S) ~ dat$AET + dat$NDVI)
+  prod_model = lm(dat$S ~ dat$AET + dat$NDVI)
   out[2] = summary(prod_model)$r.squared
-  Janzen_model = lm(log(dat$S) ~ dat$alt_range*dat$seasonality)
+  Janzen_model = lm(dat$S ~ dat$alt_range*dat$seasonality)
   out[3] = summary(Janzen_model)$r.squared
   out[4] = out[1] - out[3] # Unique r2 of productivity
   out[5] = out[1] - out[2] # Unique r2 of Janzen
-  no_alt_model = lm(log(dat$S) ~ dat$seasonality + dat$altbyseas)
-  no_seas_model = lm(log(dat$S) ~ dat$alt_range + dat$altbyseas)
-  no_int_model = lm(log(dat$S) ~ dat$seasonality + dat$alt_range)
+  no_alt_model = lm(dat$S ~ dat$seasonality + dat$altbyseas)
+  no_seas_model = lm(dat$S ~ dat$alt_range + dat$altbyseas)
+  no_int_model = lm(dat$S ~ dat$seasonality + dat$alt_range)
   out[6] = out[3] - summary(no_alt_model)$r.squared
   out[7] = out[3] - summary(no_seas_model)$r.squared
   out[8] = out[3] - summary(no_int_model)$r.squared

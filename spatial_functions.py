@@ -14,7 +14,7 @@ from matplotlib.mlab import PCA
 import re
 from math import sin, cos, sqrt, atan2
 import csv
-import statsmodels.api as sm
+from matplotlib.pyplot import cm
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -778,10 +778,12 @@ def plot_r2_weighted_S(weighted_S_folder, taxon, file_ext, ax = None):
     return ax 
         
 def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
-    """Plot the weighing parameter q against R^2 values (full model, three reduced models, 
+    """Plot the weighing parameter q against R^2 values (full model, two reduced models, 
     
-    and the unique contributions from the three sets of parameters.
-    The output is a 1*2 plot, with R^2 of the four models in the left subplot, and unique contributions in the right subplot.
+    and the unique contributions.
+    The output is a 1*3 plot, with R^2 of the three models in the left subplot, unique contributions 
+    of the two reduced models in the middle subplot, and unique contributions of the three parameters
+    in Janzen's hypothesis in the right subplot.
     Inputs:
     results_dir: txt file with the output from multiple regression, generated in weighted_richness.py
     taxon: string, name of the taxon
@@ -791,34 +793,81 @@ def plot_r2_multilin(results_dir, taxon, out_dir, legend = True):
     """
     results = np.genfromtxt(results_dir, dtype = None, delimiter = '\t')
     results_taxon = results[results['f0'] == taxon]
-    q, tot_r2, T_r2, prod_r2, janzen_r2, T_r2_part, prod_r2_part, janzen_r2_part = \
-        zip(*results_taxon[['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8']])
-    r2 = [tot_r2, T_r2, prod_r2, janzen_r2]
-    unique_r2 = [T_r2_part, prod_r2_part, janzen_r2_part]
-    col = ['#000000', '#FF4040', '#1874CD', '#8B7765']
-    fig = plt.figure(figsize = (7, 4))
-    ax1 = plt.subplot(1, 2, 1) 
-    line_list = [None] * 4
+    q, tot_r2, prod_r2, janzen_r2, prod_r2_part, janzen_r2_part, alt_r2_part, seas_r2_part, int_r2_part = \
+        zip(*results_taxon[['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9']])
+    r2 = [tot_r2, prod_r2, janzen_r2]
+    unique_r2 = [prod_r2_part, janzen_r2_part]
+    unique_r2_Janzen = [alt_r2_part, seas_r2_part, int_r2_part]
+    col = ['#000000','#1874CD', '#8B7765']
+    col_Janzen = ['#CD853F', '#EE799F', '#912CEE']
+    
+    fig = plt.figure(figsize = (11, 4))
+    ax1 = plt.subplot(1, 3, 1) 
+    line_list = [None] * 3
     for i, r2_val in enumerate(r2):
         line_list[i],  = plt.plot(q, r2_val, c = col[i], linewidth = 2)
     ax1.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    if legend:
+        plt.legend(line_list, ['Full', 'Productivity', 'Janzen'], loc = 2, prop = {'size': 10})    
     plt.xlabel('Weighing parameter q', fontsize = 8)
     plt.ylabel('R-squared', fontsize = 8)
     plt.ylim((0, 1))
-    ax2 = plt.subplot(1, 2, 2)
+    
+    ax2 = plt.subplot(1, 3, 2)
     for j, unique_r2_val in enumerate(unique_r2):
         plt.plot(q, unique_r2_val, c = col[j + 1], linewidth = 2)
     ax2.tick_params(axis = 'both', which = 'major', labelsize = 6)
     plt.xlabel('Weighing parameter q', fontsize = 8)
     plt.ylabel('Unique R-squared', fontsize = 8)
     plt.ylim((0, 0.7))
+    
+    ax3 = plt.subplot(1, 3, 3)
+    line_list_Janzen = [None] * 3
+    for k, unique_r2_val in enumerate(unique_r2_Janzen):
+        line_list_Janzen[k], = plt.plot(q, unique_r2_val, c = col_Janzen[k], linewidth = 2)
+    ax3.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('Unique R-squared', fontsize = 8)
+    plt.ylim((0, 0.7))
     if legend:
-        plt.legend(line_list, ['Full', 'Temperature', 'Productivity', 'Janzen'], loc = 2, prop = {'size': 10})
+        plt.legend(line_list_Janzen, ['Altitude', 'Seasonality', 'Interaction'], loc = 2, prop = {'size': 10})    
     
     plt.subplots_adjust(wspace = 0.29)
     plt.savefig(out_dir, dpi = 600)
-    return None
- 
+
+def plot_quantile_constraint(out_dir, q_list, r2_list, pred_vars, pred_var_prop_list):
+    """This function creates a 2-panel plot for the output from quantile regression on constraining factors.
+    
+    The left panel shows how r^2 between predicted vs observed S(q) changes with q.
+    The right panel shows how the proportion of predictors change among grid cells with q.
+    Inputs:
+    out_dir - directory where the results will be saved.
+    q_list, r2_list - lists of q's and corresponding r2's
+    pred_vars - a list of predictor variables
+    pred_var_prop_list - a list of lists, each sublist contains the proportions (length q) for a predictor variable
+    
+    """
+    fig = plt.figure(figsize = (8, 4))
+    ax1 = plt.subplot(1, 2, 1) 
+    plt.plot(q_list, r2_list, c = 'black', linewidth = 2)
+    ax1.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('R-squared between observed and predicted S(q)', fontsize = 8)
+    
+    ax2 = plt.subplot(1, 2, 2)
+    line_list_constraint = [None] * len(pred_vars)
+    color = cm.rainbow(np.linspace(0, 1, len(pred_vars)))
+    for i, pred_var_prop in enumerate(pred_var_prop_list):
+        line_list_constraint[i],  = plt.plot(q_list, pred_var_prop, c = color[i], linewidth = 2)
+    ax2.tick_params(axis = 'both', which = 'major', labelsize = 6)
+    plt.xlabel('Weighing parameter q', fontsize = 8)
+    plt.ylabel('Proportion of grid cells', fontsize = 8)
+    plt.ylim((0, 0.7))
+    plt.legend(line_list_constraint, pred_vars, loc = 2, prop = {'size': 10})
+    
+    plt.subplots_adjust(wspace = 0.29)
+    plt.savefig(out_dir, dpi = 600)    
+    
 def obtain_mean_annual_ndvi(in_folder, start_year, end_year, out_dir):
     """Mean annual NDVI across the grid using monthly data from multiple years.
     
@@ -1002,3 +1051,4 @@ def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, ma
     outRaster.FlushCache()
     outRaster = None
     return None
+    

@@ -36,9 +36,28 @@ def import_shapefile(in_dir, Attr = None, AttrFilter = None):
         geom_list.append(feature.GetGeometryRef().ExportToWkt())
     return geom_list
 
-def import_raster_as_array(raster_dir):
+def import_shapefile_field(in_dir, Attr = None, AttrFilter = None, field = 'binomial'):
+    """Read in a .shp file and save the geometry(ies) for unique values of field as a dictionary."""
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    datasource = driver.Open(in_dir, 0)
+    layer = datasource.GetLayer()
+    if Attr:
+        filter_string = Attr + " IN " + AttrFilter
+        layer.SetAttributeFilter(filter_string)
+    geom_dic = {}
+    for feature in layer:
+        val = feature.GetField(field)
+        geom_wkt = feature.GetGeometryRef().ExportToWkt()
+        if val not in geom_dic: geom_dic[val] = [geom_wkt]
+        else: geom_dic[val].append(geom_wkt)
+    return geom_dic
+    
+def import_raster_as_array(raster_dir, nodata = None):
     raster = gdal.Open(raster_dir)
     band = raster.GetRasterBand(1).ReadAsArray()
+    if nodata is not None:
+        nodata_orig = raster.GetRasterBand(1).GetNoDataValue()
+        band[band == nodata_orig] = nodata
     return band
 
 def range_dic_to_csv(in_dir, out_dir, remove_list = []):

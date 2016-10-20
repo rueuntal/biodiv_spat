@@ -69,10 +69,8 @@ def proj_name_to_proj4(proj_name):
 
 def proj_extent(proj_name):
     """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
-    in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
-    out_proj4 = proj_name_to_proj4(proj_name)
-    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
-    
+    in_proj = 'latlong'
+    transform = reproj(in_proj, proj_name)
     x, y, z = transform.TransformPoint(180, 90)
     return [-x, x, -y, y]
 
@@ -377,7 +375,7 @@ def create_array_sp_list(geom_dic_sp, out_file_name, pixel_size = 100000, out_pr
     y_res = int((ymax - ymin) / pixel_size)
     array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
     
-    for sp in sp_list:
+    for sp in geom_dic_sp.keys():
         wkt_reproj = sp_reproj(geom_dic_sp, sp, out_proj)
         # Convert species range to raster array
         sp_array = create_array_for_raster(proj_extent(out_proj), geom = wkt_reproj, pixel_size = pixel_size)        

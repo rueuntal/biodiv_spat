@@ -60,6 +60,22 @@ def import_raster_as_array(raster_dir, nodata = None):
         band[band == nodata_orig] = nodata
     return band
 
+def proj_name_to_proj4(proj_name):
+    """Given name of a projection, return its specification in PROJ4."""
+    name_and_proj = {'latlong': '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs',
+                     'behrmann': '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
+                     }
+    return name_and_proj[proj_name]
+
+def proj_extent(proj_name):
+    """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
+    in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
+    out_proj4 = proj_name_to_proj4(proj_name)
+    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
+    
+    x, y, z = transform.TransformPoint(180, 90)
+    return [-x, x, -y, y]
+
 def range_dic_to_csv(in_dir, out_dir, remove_list = []):
     """Read in a dictionary of range sizes for a taxon and convert it to csv for processing in R."""
     range_dic = import_pickle_file(in_dir)
@@ -124,9 +140,10 @@ def get_distance_latlon(lat1, lon1, lat2, lon2):
     distance = R * c
     return distance
     
-def reproj(in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
-           out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+def reproj(in_proj = 'latlong', out_proj = 'behrmann'):
     """General function for reprojection which can be used for both vectors and rasters."""
+    in_proj4 = proj_name_to_proj4(in_proj)
+    out_proj4 = proj_name_to_proj4(out_proj)
     in_proj = osr.SpatialReference()
     in_proj.ImportFromProj4(in_proj4)
     out_proj = osr.SpatialReference()
@@ -134,33 +151,16 @@ def reproj(in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
     transform = osr.CoordinateTransformation(in_proj, out_proj)
     return transform
 
-def reproj_geom(in_geom, in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs', \
-           out_proj4 = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+def reproj_geom(in_geom, in_proj = 'latlong', out_proj = 'behrmann'):
     """Function to reproject geometries (defined by WKT). 
     
     Default input is unprojected WGS84 (EPSG 4326), default output is Behrmann equal area.
     
     """
     in_geom_ogr = ogr.CreateGeometryFromWkt(in_geom)
-    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
+    transform = reproj(in_proj, out_proj)
     in_geom_ogr.Transform(transform)
     return in_geom_ogr.ExportToWkt()
-
-def proj_name_to_proj4(proj_name):
-    """Given name of a projection, return its specification in PROJ4."""
-    name_and_proj = {'latlong': '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs',
-                     'behrmann': '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
-                     }
-    return name_and_proj[proj_name]
-
-def proj_extent(proj_name):
-    """Give the global extent (xmin, xmax, ymin, ymax) of a projection for raster. Only Behrmann is available now."""
-    in_proj4 = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' # Lat and long
-    out_proj4 = proj_name_to_proj4(proj_name)
-    transform = reproj(in_proj4 = in_proj4, out_proj4 = out_proj4)
-    
-    x, y, z = transform.TransformPoint(180, 90)
-    return [-x, x, -y, y]
 
 def weighted_sample_range_size(range_size_list, sample_size):
     """Generate a random sample of a certain size (length) from a list of range sizes,
@@ -221,19 +221,16 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value 
     outRaster = None
     return None
     
-def sp_reproj(postgis_cur, table_name, sp):
+def sp_reproj(geom_dic, sp, out_proj):
     """Subfunction to obtain the range map of a species and reproject it to Behrmann Equal Area."""
-    sp_geom_exec = "SELECT ST_AsText(geom) FROM " + table_name + " WHERE binomial='" + sp + "'"
-    postgis_cur.execute(sp_geom_exec)
-    sp_geom_list = [x[0] for x in postgis_cur.fetchall()] # Here sp_geom_list is a list of geoms in WKT, each a multipolygon
-    sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
+    sp_geom_shapes =  [shapely.wkt.loads(x) for x in geom_dic[sp]]
     try:
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
     except: # Fails for Gulo gulo, because of holes?
         sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes] # Adding zero buffer somehow helps
         sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    # Reproject geom into Behrmann                
-    wkt_reproj = reproj_geom(sp_geom_wkt)
+    # Reproject geom                
+    wkt_reproj = reproj_geom(sp_geom_wkt, out_proj = out_proj)
     return wkt_reproj
 
 def sp_reproj_birds(folder, file_name, Attr = None, Attr_filter = None):
@@ -373,21 +370,17 @@ def create_sp_range_dic_bird(folder, out_file_name, Attr = None, Attr_filter = N
     out_file.close()
     return None        
 
-def create_array_sp_list(postgis_cur, table_name, out_file_name, pixel_size = 100000):
+def create_array_sp_list(geom_dic_sp, out_file_name, pixel_size = 100000, out_proj = 'behrmann'):
     """Create an array with species list in each grid covering the globe."""
-    xmin, xmax, ymin, ymax = proj_extent('behrmann')
-    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
-    postgis_cur.execute(sp_list_exec)
-    sp_list = [x[0] for x in postgis_cur.fetchall()] 
-    
+    xmin, xmax, ymin, ymax = proj_extent(out_proj)
     x_res = int((xmax - xmin) / pixel_size)
     y_res = int((ymax - ymin) / pixel_size)
     array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
     
     for sp in sp_list:
-        wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
+        wkt_reproj = sp_reproj(geom_dic_sp, sp, out_proj)
         # Convert species range to raster array
-        sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
+        sp_array = create_array_for_raster(proj_extent(out_proj), geom = wkt_reproj, pixel_size = pixel_size)        
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
     
     # Save to file

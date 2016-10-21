@@ -50,6 +50,14 @@ def import_shapefile_field(in_dir, Attr = None, AttrFilter = None, field = 'bino
         geom_wkt = feature.GetGeometryRef().ExportToWkt()
         if val not in geom_dic: geom_dic[val] = [geom_wkt]
         else: geom_dic[val].append(geom_wkt)
+    for val in geom_dic.keys():
+        geom_shapes =  [shapely.wkt.loads(x) for x in geom_dic[val]]
+        try:
+            geom_wkt_union = shapely.wkt.dumps(shapely.ops.cascaded_union(geom_shapes))
+        except: 
+            geom_shapes = [x.buffer(0) for x in geom_shapes] # Adding zero buffer somehow helps
+            geom_wkt_union = shapely.wkt.dumps(shapely.ops.cascaded_union(geom_shapes))
+        geom_dic[val] = geom_wkt_union
     return geom_dic
     
 def import_raster_as_array(raster_dir, nodata = None):
@@ -201,15 +209,14 @@ def create_array_for_raster(extent, geom = None, no_value = 0, pixel_size = 1000
     band = target_ds.GetRasterBand(1)
     return band.ReadAsArray()
 
-def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value = 0, \
-                            out_proj = '+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'):
+def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value = 0, out_proj = 'behrmann'):
     """Convert an array to raster."""
     cols = array.shape[1]
     rows = array.shape[0]
     xmin, ymax = rasterOrigin
     geotrans = (xmin, pixel_size, 0, ymax, 0, -pixel_size)
     outRasterSRS = osr.SpatialReference()
-    outRasterSRS.ImportFromProj4(out_proj)
+    outRasterSRS.ImportFromProj4(proj_name_to_proj4(out_proj))
     proj_wkt = outRasterSRS.ExportToWkt()
     
     outRaster = write_raster_to_file(out_file, cols, rows, geotrans, proj_wkt, nodata = no_value)
@@ -219,40 +226,6 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value 
     outRaster = None
     return None
     
-def sp_reproj(geom_dic, sp, out_proj):
-    """Subfunction to obtain the range map of a species and reproject it to Behrmann Equal Area."""
-    sp_geom_shapes =  [shapely.wkt.loads(x) for x in geom_dic[sp]]
-    try:
-        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    except: # Fails for Gulo gulo, because of holes?
-        sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes] # Adding zero buffer somehow helps
-        sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-    # Reproject geom                
-    wkt_reproj = reproj_geom(sp_geom_wkt, out_proj = out_proj)
-    return wkt_reproj
-
-def sp_reproj_birds(folder, file_name, Attr = None, Attr_filter = None):
-    """sp_reproj() for birds. This function returns two strings - species binomial, and its reprojected range."""
-    in_dir = folder + '/' + file_name
-    file_split = file_name.split('_')
-    sp_name = file_split[0] + ' ' + file_split[1]
-    if isinstance(Attr_filter, basestring): # If Attr_filter is a string, i.e., a single value
-        sp_geom_list = import_shapefile(in_dir, Attr = Attr, AttrFilter = Attr_filter)
-    else: 
-        sp_geom_list = []
-        for ind_filter in Attr_filter: 
-            sp_geom_list.extend(import_shapefile(in_dir, Attr = Attr, AttrFilter = ind_filter))
-    if len(sp_geom_list) > 0: # If Attribute exists
-        sp_geom_shapes = [shapely.wkt.loads(x) for x in sp_geom_list]
-        try:
-            sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-        except: 
-            sp_geom_shapes = [x.buffer(0) for x in sp_geom_shapes]
-            sp_geom_wkt = shapely.wkt.dumps(shapely.ops.cascaded_union(sp_geom_shapes))
-        wkt_reproj = reproj_geom(sp_geom_wkt) 
-        return sp_name, wkt_reproj
-    else: return sp_name, None
-
 def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
     """Convert an IUCN shapefile with range maps of a taxon into a raster file of richness, with a given list of species removed."""
     xmin, xmax, ymin, ymax = proj_extent('behrmann')
@@ -331,42 +304,24 @@ def richness_to_raster_ver2(sp_array, out_dir, out_name, pixel_size = 100000, re
             #convert_array_to_raster(family_landscape, [xmin, ymax], out_file, pixel_size)
     #return None
 
-def create_sp_range_dic(postgis_cur, table_name, out_file_name):
-    """Obtain the range size of species (in m^2), put in a dictionary, and save to file. 
+def create_sp_range_dic(geom_dic_sp, continent = None, proj = 'behrmann'):
+    """Obtain the range size of species (in m^2) either globally (when "continent" = None) or 
     
-    Range sizes are calculated under Behrmann equal area projection.
+    on one continent ("continent" has to be wkt of the polygon in WGS 84). The output is a dictionary. 
     
     """
-    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
-    postgis_cur.execute(sp_list_exec)
-    sp_list = [x[0] for x in postgis_cur.fetchall()] 
     sp_range_dic = {}
-    
-    for sp in sp_list:
-        wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
-        sp_range_shape = shapely.wkt.loads(wkt_reproj)
-        sp_range_dic[sp] = sp_range_shape.area
-    
-    out_file = open(out_file_name, 'wb')
-    cPickle.dump(sp_range_dic, out_file, protocol = 2)
-    out_file.close()
-    return None        
-
-def create_sp_range_dic_bird(folder, out_file_name, Attr = None, Attr_filter = None):
-    """create_sp_range_dic() for birds, where there is one shapefile per species instead of one shapefile for all species combined."""
-    sp_range_dic = {}
-    for file in os.listdir(folder):
-        if file.endswith('.shp'):
-            sp_name, wkt_reproj = sp_reproj_birds(folder, file, Attr = Attr, Attr_filter = Attr_filter)
-            if wkt_reproj is not None:
-                if sp_name in sp_range_dic: print "Warning: " + sp_name + " has duplicates."
-                sp_range_shape = shapely.wkt.loads(wkt_reproj)
-                sp_range_dic[sp_name] = sp_range_shape.area
-    
-    out_file = open(out_file_name, 'wb')
-    cPickle.dump(sp_range_dic, out_file, protocol = 2)
-    out_file.close()
-    return None        
+    if continent is not None: reproj_continent = reproj_geom(continent, out_proj = out_proj)
+    for sp in geom_dic_sp.keys():
+        wkt_sp = geom_dic_sp[sp]
+        reproj_sp = reproj_geom(wkt_sp, out_proj = out_proj)
+        sp_range = shapely.wkt.loads(reproj_sp)
+        if continent is not None:
+            continent_range = shapely.wkt.loads(reproj_continent)
+            sp_range_continent = sp_range.intersection(continent_range)
+        else: sp_range_continent = sp_range
+        sp_range_dic[sp]  = sp_range_continent.area
+    return sp_range_dic
 
 def create_array_sp_list(geom_dic_sp, out_file_name, pixel_size = 100000, out_proj = 'behrmann'):
     """Create an array with species list in each grid covering the globe."""
@@ -376,7 +331,8 @@ def create_array_sp_list(geom_dic_sp, out_file_name, pixel_size = 100000, out_pr
     array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
     
     for sp in geom_dic_sp.keys():
-        wkt_reproj = sp_reproj(geom_dic_sp, sp, out_proj)
+        sp_geom_wkt = geom_dic_sp[sp]             
+        wkt_reproj = reproj_geom(sp_geom_wkt, out_proj = out_proj)        
         # Convert species range to raster array
         sp_array = create_array_for_raster(proj_extent(out_proj), geom = wkt_reproj, pixel_size = pixel_size)        
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])

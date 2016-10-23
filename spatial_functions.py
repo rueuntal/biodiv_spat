@@ -16,6 +16,7 @@ from math import sin, cos, sqrt, atan2
 import csv
 from matplotlib.pyplot import cm
 from scipy.stats.stats import pearsonr
+from collections import Counter
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -994,7 +995,7 @@ def corr_richness_quartiles(sp_list_flat, sp_sort):
     sp_list_flat - 1-d (flattened) array with species list for each grid cell
     sp_sort - species list sorted by range size (from large to small)
     
-    Output is a list with four numbers.
+    Output is a list with four r-values.
     
     """
     S_flat = [len(grid) for grid in sp_list_flat]
@@ -1037,3 +1038,34 @@ def corr_richness_taxon_continent(sp_range_array, sp_list_array, continent, out_
     out_file = open(out_dir, 'ab')
     print>>out_file, ','.join(map(str, [continent] + quart_r))
     out_file.close()
+
+def corr_null_range_scattered(sp_range_array, sp_list_array, continent, out_dir, cont_geom = None, Niter = 200):
+    """Randomly distribute species on the landscape, keeping the range size of each species, and compute correlation
+    
+    between overall S and partial S on these simulated landscapes.
+    Species ranges are allowed to be scattered.
+    
+    """
+    if continent is not 'global':
+        cont_geom_reproj = reproj_geom(cont_geom)
+        cont_array = create_array_for_raster(proj_extent('behrmann'), geom = cont_geom_reproj)
+        sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
+                    if (cont_array[i][j] == 1 and len(sp_list_array[i][j]) > 0)]
+    else: sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) if len(sp_list_array[i][j]) > 0]
+    
+    sp_cont = sp_range_array[['sp', continent]][sp_range_array[continent] > 0] # Species with range on continent
+    sp_sort = sp_cont['sp'][sp_cont[continent].argsort()[::-1]]
+    sp_list_onelist = [sp for grid in sp_list_flat for sp in grid]
+    sp_Ncell = Counter(sp_list_onelist)
+    
+    for i in range(Niter):
+        sp_list_sim = [[] for grid in sp_list_flat]
+        for sp in sp_Ncell.keys():
+            n_sp = sp_Ncell[sp]
+            sp_range_sim = np.random.choice(range(len(sp_list_flat)), n_sp, replace = False)
+            sp_list_sim = [sp_list_sim[j] + [sp] if j in sp_range_sim else sp_list_sim[j] for j in range(len(sp_list_sim))]
+        out_sim = corr_richness_quartiles(sp_list_sim, sp_sort)
+        out_file = open(out_dir, 'ab')
+        print>>out_file, ','.join(map(str, [continent] + out_sim))
+        out_file.close()
+        

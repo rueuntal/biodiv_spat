@@ -988,6 +988,24 @@ def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, ma
     outRaster = None
     return None
 
+def corr_richness_quartiles(sp_list_flat, sp_sort):
+    """Sub-function to compute the correlation between overall S & partial S of each quartile, given:
+    
+    sp_list_flat - 1-d (flattened) array with species list for each grid cell
+    sp_sort - species list sorted by range size (from large to small)
+    
+    Output is a list with four numbers.
+    
+    """
+    S_flat = [len(grid) for grid in sp_list_flat]
+    Nquart = int(np.round(len(sp_sort) / 4))
+    out = []
+    for i in range(4):
+        sp_quart = sp_sort[(Nquart * i): (min(Nquart * (i + 1), len(sp_sort)))]
+        S_quart = [len([x for x in grid if x in sp_quart]) for grid in sp_list_flat]
+        out.append(pearsonr(S_flat, S_quart)[0])
+    return out
+    
 def corr_richness_taxon_continent(sp_range_array, sp_list_array, continent, out_dir, cont_geom = None):
     """Obtain the correlation between overall richness and partial richness for each of the four quartiles
     
@@ -1011,17 +1029,11 @@ def corr_richness_taxon_continent(sp_range_array, sp_list_array, continent, out_
                     if cont_array[i][j] == 1]
     else: sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array))]
     sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells with no species from the given taxon.
-    S_flat = [len(grid) for grid in sp_list_flat]
     
     sp_cont = sp_range_array[['sp', continent]][sp_range_array[continent] > 0]
     sp_sort = sp_cont['sp'][sp_cont[continent].argsort()[::-1]]
-    Nquart = int(np.round(len(sp_sort) / 4))
-    out = [continent]
-    for i in range(4):
-        sp_quart = sp_sort[(Nquart * i): (min(Nquart * (i + 1), len(sp_sort)))]
-        S_quart = [len([x for x in grid if x in sp_quart]) for grid in sp_list_flat]
-        out.append(pearsonr(S_flat, S_quart)[0])
+    quart_r = corr_richness_quartiles(sp_list_flat, sp_sort)
     
     out_file = open(out_dir, 'ab')
-    print>>out_file, ','.join(map(str, out))
+    print>>out_file, ','.join(map(str, [continent] + quart_r))
     out_file.close()

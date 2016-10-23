@@ -15,6 +15,7 @@ import re
 from math import sin, cos, sqrt, atan2
 import csv
 from matplotlib.pyplot import cm
+from scipy.stats.stats import pearsonr
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -81,20 +82,6 @@ def proj_extent(proj_name):
     transform = reproj(in_proj, proj_name)
     x, y, z = transform.TransformPoint(180, 90)
     return [-x, x, -y, y]
-
-def range_dic_to_csv(in_dir, out_dir, remove_list = []):
-    """Read in a dictionary of range sizes for a taxon and convert it to csv for processing in R."""
-    range_dic = import_pickle_file(in_dir)
-    out_write = open(out_dir, 'wb')
-    out = csv.writer(out_write)
-    
-    for sp in range_dic.keys():
-        if sp not in remove_list:
-            results = np.zeros((1, ), dtype = ('S25, f15'))
-            results['f0'] = sp
-            results['f1'] = range_dic[sp]
-            out.writerows(results)
-    out_write.close()
 
 def prob_of_presence(focal_sp, dic_of_sp_range, S, Niter = 10000):
     """Using weighted random sampling without replacement to compute the probability of 
@@ -311,14 +298,19 @@ def create_sp_range_dic(geom_dic_sp, continent = None, proj = 'behrmann'):
     
     """
     sp_range_dic = {}
-    if continent is not None: reproj_continent = reproj_geom(continent, out_proj = out_proj)
+    if continent is not None: reproj_continent = reproj_geom(continent, out_proj = proj)
     for sp in geom_dic_sp.keys():
         wkt_sp = geom_dic_sp[sp]
-        reproj_sp = reproj_geom(wkt_sp, out_proj = out_proj)
+        reproj_sp = reproj_geom(wkt_sp, out_proj = proj)
         sp_range = shapely.wkt.loads(reproj_sp)
         if continent is not None:
             continent_range = shapely.wkt.loads(reproj_continent)
-            sp_range_continent = sp_range.intersection(continent_range)
+            try:
+                sp_range_continent = sp_range.intersection(continent_range)
+            except:
+                continent_range = continent_range.buffer(0)
+                sp_range = sp_range.buffer(0)
+                sp_range_continent = sp_range.intersection(continent_range)
         else: sp_range_continent = sp_range
         sp_range_dic[sp]  = sp_range_continent.area
     return sp_range_dic
@@ -336,28 +328,6 @@ def create_array_sp_list(geom_dic_sp, out_file_name, pixel_size = 100000, out_pr
         # Convert species range to raster array
         sp_array = create_array_for_raster(proj_extent(out_proj), geom = wkt_reproj, pixel_size = pixel_size)        
         array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
-    
-    # Save to file
-    out_file = open(out_file_name, 'wb')
-    cPickle.dump(array_list, out_file, protocol = 2)
-    out_file.close()
-    return None
-
-def create_array_sp_list_birds(folder, out_file_name, Attr = None, Attr_filter = None, pixel_size = 100000):
-    """create_array_sp_list() for birds."""
-    xmin, xmax, ymin, ymax = proj_extent('behrmann')
-    
-    x_res = int((xmax - xmin) / pixel_size)
-    y_res = int((ymax - ymin) / pixel_size)
-    array_list = np.array([[[] for i in range(x_res)] for j in range(y_res)])
-    
-    file_list = os.listdir(folder)
-    for file in file_list:
-        if file.endswith('.shp'):
-            sp, wkt_reproj = sp_reproj_birds(folder, file, Attr = Attr, Attr_filter = Attr_filter)
-            # Convert species range to raster array
-            sp_array = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
-            array_list = np.array([[list(array_list[j][i]) + [sp] if sp_array[j][i] > 0 else list(array_list[j][i]) for i in range(x_res)] for j in range(y_res)])
     
     # Save to file
     out_file = open(out_file_name, 'wb')
@@ -1017,4 +987,41 @@ def obtain_max_min_var(in_folder, in_file_1, in_file_2, out_folder, out_name, ma
     outRaster.FlushCache()
     outRaster = None
     return None
+
+def corr_richness_taxon_continent(sp_range_array, sp_list_array, continent, out_dir, cont_geom = None):
+    """Obtain the correlation between overall richness and partial richness for each of the four quartiles
     
+    defind by range size on the continent.
+    Inputs:
+    sp_range_array: a structured array with the first column ('sp') as sp name, the second column ('global') 
+        as the global range size of the sp, and subsequent columns as range of the sp on different continents
+    continent - string, name of the continent. Can take one of the five values: 'global', 'North America', 'South America', 
+        'Africa', 'Eurasia'.
+    out_dir - output directory in 
+    cont_geom - multipolygon of the continent in WKT, WGS 84. If coninent is 'global', it does not have to be defined.
+    
+    Saves the result to out_dir with five values in a row: continent, pearson correlation between overall S and partial S 
+        for each of the four quartiles. 
+        
+     """
+    if continent is not 'global':
+        cont_geom_reproj = reproj_geom(cont_geom)
+        cont_array = create_array_for_raster(proj_extent('behrmann'), geom = cont_geom_reproj)
+        sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
+                    if cont_array[i][j] == 1]
+    else: sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array))]
+    sp_list_flat = [grid for grid in sp_list_flat if len(grid) > 0] # Remove empty grid cells with no species from the given taxon.
+    S_flat = [len(grid) for grid in sp_list_flat]
+    
+    sp_cont = sp_range_array[['sp', continent]][sp_range_array[continent] > 0]
+    sp_sort = sp_cont['sp'][sp_cont[continent].argsort()[::-1]]
+    Nquart = int(np.round(len(sp_sort) / 4))
+    out = [continent]
+    for i in range(4):
+        sp_quart = sp_sort[(Nquart * i): (min(Nquart * (i + 1), len(sp_sort)))]
+        S_quart = [len([x for x in grid if x in sp_quart]) for grid in sp_list_flat]
+        out.append(pearsonr(S_flat, S_quart)[0])
+    
+    out_file = open(out_dir, 'ab')
+    print>>out_file, ','.join(map(str, out))
+    out_file.close()

@@ -15,7 +15,7 @@ import re
 from math import sin, cos, sqrt, atan2
 import csv
 from matplotlib.pyplot import cm
-from scipy.stats.stats import pearsonr
+from scipy.stats.stats import pearsonr, spearmanr
 from collections import Counter
 import random
 
@@ -1101,4 +1101,40 @@ def corr_null_range(sp_range_array, sp_list_array, continent, out_dir, sim_type 
         print>>out_file, ','.join(map(str, [continent] + out_sim))
         out_file.close()
         
+def corr_sq_s_continent(sp_range_array, sp_list_array, continent, q, cont_geom = None):
+    """Obtain the correlation between richness (S) and S(q) on continent or global scale. 
+    
+    If computed for continent, the continent-level range sizes are used. 
+    S(q) is computed as S(q) = S_tot**(-q) * sum((range_i / range_tot) ** (-q))
+    Cells with zero richness are removed.
+    The output is a dictionary with two correlation values, 'spearman' and 'pearson'. 
+    
+     """
+    if continent is not 'global':
+        cont_geom_reproj = reproj_geom(cont_geom)
+        cont_array = create_array_for_raster(proj_extent('behrmann'), geom = cont_geom_reproj)
+        sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
+                    if (cont_array[i][j] == 1 and len(sp_list_array[i][j]) > 0)]
+    else: sp_list_flat = [sp_list_array[i][j] for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array)) \
+                          if len(sp_list_array[i][j]) > 0]
+    sp_unique = np.unique([sp for grid in sp_list_flat for sp in grid])
+    
+    sp_cont = sp_range_array[['sp', continent]][sp_range_array[continent] > 0]
+    sp_range_dic = {}
+    for row in sp_cont: sp_range_dic[row[0]] = row[1]
+    for sp in sp_unique: # Some species with limited ranges are missed by the continent shapefile
+        if sp not in sp_range_dic.keys():
+            sp_range_dic[sp] = sp_range_array['global'][sp_range_array['sp'] == sp][0]
+    range_tot = sum(sp_range_dic.values())
+    
+    S_list = [len(grid) for grid in sp_list_flat]
+    Sq_list = []
+    for grid in sp_list_flat: # Note here the constant is S_tot ** (-q), not S ** (-q), which wouldn't be a constant
+        Sq = len(sp_cont) ** (-q) * np.sum([(range_tot / sp_range_dic[sp]) ** q for sp in grid])
+        Sq_list.append(Sq)
+    corr_dic = {}
+    corr_dic['spearman'] = spearmanr(Sq_list, S_list)[0]
+    corr_dic['pearson'] = pearsonr(Sq_list, S_list)[0]
+    return corr_dic
+
         

@@ -7,7 +7,6 @@ import numpy as np
 from scipy import stats
 import cPickle
 from osgeo import ogr, osr, gdal
-import psycopg2
 import shapely.wkt, shapely.ops
 import multiprocessing
 from matplotlib.mlab import PCA
@@ -61,6 +60,25 @@ def import_shapefile_field(in_dir, Attr = None, AttrFilter = None, field = 'bino
             geom_shapes = [x.buffer(0) for x in geom_shapes] # Adding zero buffer somehow helps
             geom_wkt_union = shapely.wkt.dumps(shapely.ops.cascaded_union(geom_shapes))
         geom_dic[val] = geom_wkt_union
+    return geom_dic
+
+def import_shapefile_folder(in_folder, Attr = None, AttrFilter = None):
+    """Similar to import_shapefile_field, but for the case where sperate .shp files for different species 
+    
+    are in one folder (e.g., BIEN). 
+    
+    """
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    file_list = os.listdir(in_folder)
+    sp_list = set([x.split('.')[0] for x in file_list])
+    geom_dic = {}
+    for sp in sp_list:
+        sp_dir = in_folder + sp + '.shp'
+        try:
+            geom_wkt = import_shapefile(sp_dir, Attr, AttrFilter)
+            geom_dic[sp] = geom_wkt
+        except: 
+            pass
     return geom_dic
     
 def import_raster_as_array(raster_dir, nodata = None):
@@ -215,49 +233,16 @@ def convert_array_to_raster(array, rasterOrigin, out_file, pixel_size, no_value 
     outRaster = None
     return None
     
-def richness_to_raster(postgis_cur, table_name, out_dir, pixel_size = 100000, remove_sp_list = []):
-    """Convert an IUCN shapefile with range maps of a taxon into a raster file of richness, with a given list of species removed."""
-    xmin, xmax, ymin, ymax = proj_extent('behrmann')
-    sp_list_exec = 'SELECT DISTINCT binomial FROM ' + table_name
-    postgis_cur.execute(sp_list_exec)
-    sp_list = [x[0] for x in postgis_cur.fetchall() if x[0] not in remove_sp_list]
-    
-    table_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
-    for sp in sp_list:
-            wkt_reproj = sp_reproj(postgis_cur, table_name, sp)
-            # Convert species range to raster array
-            sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size)        
-            table_landscape += sp_landscape
-            
-    out_file = out_dir + '/' + table_name + '_richness_' + str(int(pixel_size)) + '.tif'
-    convert_array_to_raster(table_landscape, [xmin, ymax], out_file, pixel_size)
-    return None
- 
-def richness_to_raster_birds(folder, out_dir, pixel_size = 100000, remove_sp_list = []):
-    """richness_to_raster() for birds."""
-    xmin, xmax, ymin, ymax = proj_extent('behrmann')
-    table_landscape = create_array_for_raster(proj_extent('behrmann'), pixel_size = pixel_size)
-    for file in os.listdir(folder):
-        if file.endswith('.shp'):
-            sp_name, wkt_reproj = sp_reproj_birds(folder, file)
-            sp_landscape = create_array_for_raster(proj_extent('behrmann'), geom = wkt_reproj, pixel_size = pixel_size) 
-            table_landscape += sp_landscape
-            
-    out_file = out_dir + '/birds_richness_' + str(int(pixel_size)) + '.tif'
-    convert_array_to_raster(table_landscape, [xmin, ymax], out_file, pixel_size)
-    return None
- 
-def richness_to_raster_ver2(sp_array, out_dir, out_name, pixel_size = 100000, remove_sp_list = []):  
-    """Another way to convert richess to raster using existing array of species list, which is much faster."""
-    xmin, xmax, ymin, ymax = proj_extent('behrmann')
+def richness_to_raster(sp_array, out_dir, proj = 'behrmann', pixel_size = 100000, remove_sp_list = []):  
+    """Convert diversity to raster"""
+    xmin, xmax, ymin, ymax = proj_extent(proj)
     table_richness = np.zeros(shape = sp_array.shape)
     for j in range(len(sp_array)):
         for i in range(len(sp_array[0])):
             sp_grid = sp_array[j][i]
             richness = len([sp for sp in sp_grid if sp not in remove_sp_list])
             table_richness[j][i] = richness
-    out_file = out_dir + '/' + out_name + '_richness_' + str(pixel_size) + '.tif'
-    convert_array_to_raster(table_richness, [xmin, ymax], out_file, pixel_size)
+    convert_array_to_raster(table_richness, [xmin, ymax], out_dir, pixel_size, out_proj = proj)
     return None
 
 #def richness_to_raster_by_family(postgis_cur, table_name, out_dir, pixel_size = 100000):
@@ -1137,4 +1122,3 @@ def corr_sq_s_continent(sp_range_array, sp_list_array, continent, q, cont_geom =
     corr_dic['pearson'] = pearsonr(Sq_list, S_list)[0]
     return corr_dic
 
-        

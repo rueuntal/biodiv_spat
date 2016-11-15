@@ -17,6 +17,12 @@ from matplotlib.pyplot import cm
 from scipy.stats.stats import pearsonr, spearmanr
 from collections import Counter
 import random
+from rpy2.robjects.packages import SignatureTranslatedAnonymousPackage
+import rpy2.robjects as rob
+STAP = SignatureTranslatedAnonymousPackage
+with open('C:\\Users\\Xiao\\Documents\\GitHub\\biodiv_spat\\rfunctions.R', 'r') as f:
+    string = f.read()
+rfunctions = STAP(string, 'rfunctions')     
 
 def import_pickle_file(in_dir):
     """Read in pickled file."""
@@ -70,13 +76,13 @@ def import_shapefile_folder(in_folder, Attr = None, AttrFilter = None):
     """
     driver = ogr.GetDriverByName('ESRI Shapefile')
     file_list = os.listdir(in_folder)
-    sp_list = set([x.split('.')[0] for x in file_list])
+    sp_list = sorted(list(set([x.split('.')[0] for x in file_list])))
     geom_dic = {}
     for sp in sp_list:
         sp_dir = in_folder + sp + '.shp'
         try:
-            geom_wkt = import_shapefile(sp_dir, Attr, AttrFilter)
-            geom_dic[sp] = geom_wkt
+            geom_wkt = import_shapefile(sp_dir, Attr, AttrFilter)[0]
+            geom_dic[sp] = geom_wkt      
         except: 
             pass
     return geom_dic
@@ -1122,3 +1128,47 @@ def corr_sq_s_continent(sp_range_array, sp_list_array, continent, q, cont_geom =
     corr_dic['pearson'] = pearsonr(Sq_list, S_list)[0]
     return corr_dic
 
+def model_sq(sp_range_array, sp_list_array, continent, AET_array, spatT_array, tempT_array, 
+             q, cont_geom = None):
+    """Model S(q), globally and on each continent, using environmental variables. 
+    
+    Current model: S(q) ~ AET + spatT * tempT
+    S(q) is log-transformed, the indep vars are square-root-transformed. All are then z-normalized.
+    
+    Return: 
+    
+     """
+    # Note that for other variables the condition >=0 to screen nodata values may have to change
+    if continent is not 'global':
+        cont_geom_reproj = reproj_geom(cont_geom)
+        cont_array = create_array_for_raster(proj_extent('behrmann'), geom = cont_geom_reproj)
+        valid_index = [1 if (cont_array[i][j] == 1 and len(sp_list_array[i][j]) > 0 and AET_array[i][j] >= 0 and \
+                           spatT_array[i][j] >= 0 and tempT_array[i][j] >= 0) else 0 \
+                           for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array))]
+    else:
+        valid_index = [1 if (len(sp_list_array[i][j]) > 0 and AET_array[i][j] >= 0 and \
+                           spatT_array[i][j] >= 0 and tempT_array[i][j] >= 0) else 0 \
+                           for j in range(len(sp_list_array[0])) for i in range(len(sp_list_array))]
+    sp_list_flat = [x for (index, x) in zip(valid_index, list(sp_list_array.flatten('F'))) if index > 0]
+    AET_flat = rob.FloatVector([x for (index, x) in zip(valid_index, list(AET_array.flatten('F'))) if index > 0])
+    spatT_flat = rob.FloatVector([x for (index, x) in zip(valid_index, list(spatT_array.flatten('F'))) if index > 0])
+    tempT_flat = rob.FloatVector([x for (index, x) in zip(valid_index, list(tempT_array.flatten('F'))) if index > 0])
+    sp_unique = np.unique([sp for grid in sp_list_flat for sp in grid])
+    
+    sp_cont = sp_range_array[['sp', continent]][sp_range_array[continent] > 0]
+    sp_range_dic = {}
+    for row in sp_cont: sp_range_dic[row[0]] = row[1]
+    for sp in sp_unique: # Some species with limited ranges are missed by the continent shapefile
+        if sp not in sp_range_dic.keys():
+            sp_range_dic[sp] = sp_range_array['global'][sp_range_array['sp'] == sp][0]
+    range_tot = sum(sp_range_dic.values())
+    
+    Sq_list = []
+    for grid in sp_list_flat: # Note here the constant is S_tot ** (-q), not S ** (-q), which wouldn't be a constant
+        Sq = len(sp_cont) ** (-q) * np.sum([(range_tot / sp_range_dic[sp]) ** q for sp in grid])
+        Sq_list.append(Sq)
+    
+    Sq_list = rob.FloatVector(Sq_list)
+    out = rfunctions.sq_regression(Sq_list, AET_flat, spatT_flat, tempT_flat)
+    out = [x for x in out]
+    return out
